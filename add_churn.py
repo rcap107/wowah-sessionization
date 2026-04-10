@@ -36,7 +36,7 @@ def make_user_month(df):
         start=df.select(pl.col("timestamp").dt.truncate("1mo").min()).collect().item(),
         end=df.select(pl.col("timestamp").dt.truncate("1mo").max()).collect().item(),
         interval="1mo",
-        closed="left",
+        closed="both",
         eager=True,
     )
 
