@@ -1,7 +1,27 @@
 """
-This script is used to add a "target" column to the dataset. The target is a
-binary variable that checks whether a user has churned or not. A user is considered to have churned if
-their last month of activity is followed by a month of inactivity. The resulting dataset is saved as a parquet file.
+This script is used to add a "target" column to the dataset.
+
+The idea is that, given a month, we want to use all the data up to the last day
+of the previous month to predict whether a user will churn in the next month.
+
+So, if we are in the month of April, we want to use all the data up to March 31st
+to predict whether a user will churn in May. We want to predict May because we 
+might want to take action in April to prevent the user from churning in May. 
+
+To do this, we need to create a dataset that has one row per user per month,
+and a column that indicates whether the user has played in that month or not. 
+
+We need then to create a dataset with all the months in the range we have data for,
+then we need to do the cross product with the unique characters. 
+Now we want to prepare the data we have so that the "has played" colum is True 
+if the user has played in that month, and False otherwise.
+
+We can do this by finding all the unique combinations of user and month in the 
+original dataset, and then doing a left join with the "user month" dataset.
+Any null values in the "has played" column will be filled with False, indicating
+that the user did not play in that month.
+
+This is the "churn" dataset, which we can then use to train a model. 
 """
 
 # %%
@@ -9,44 +29,56 @@ import polars as pl
 
 # %%
 # Load the dataset
-df = pl.read_parquet("data/wowah_data_raw.parquet")
+df = pl.scan_parquet("data/wowah_data_raw.parquet")
 # %%
-from skrub import TableReport
+def make_user_month(df):
+    months = pl.datetime_range(
+        start=df.select(pl.col("timestamp").dt.truncate("1mo").min()).collect().item(),
+        end=df.select(pl.col("timestamp").dt.truncate("1mo").max()).collect().item(),
+        interval="1mo",
+        closed="left",
+        eager=True,
+    )
 
-TableReport(df)
+    char_month = (
+        df.with_columns(month_left=pl.col("timestamp").dt.truncate("1mo"))
+        .select("char")
+        .unique()
+        .join(months.to_frame(name="month").lazy(), how="cross")
+    )
+    return char_month
+
+
+user_month = make_user_month(df)
+
+
 # %%
-months = pl.datetime_range(
-    start=df["timestamp"].min(),
-    end=df["timestamp"].max(),
-    interval="1mo",
-    closed="left",
-)
+def make_data(df):
+    data = (
+        df.with_columns(pl.col("timestamp").dt.truncate("1mo").alias("month"))
+        .unique(subset=["char", "month"])
+        .with_columns(pl.lit(True).alias("has_played"))
+    )
+    return data
+
+
+data = make_data(df)
 # %%
-df_with_user_month = df.with_columns(month=pl.col("timestamp").dt.truncate("1mo"))
+
+
+def add_churn(user_month, data):
+    df_with_user_month = (
+        user_month.join(
+            data.select("char", "month", "has_played"), on=["char", "month"], how="left"
+        )
+        .with_columns(pl.col("has_played").fill_null(False))
+        .select("char", "month", "has_played")
+    )
+    return df_with_user_month
+
+
 # %%
-
-_ = df_with_user_month.join(
-    df_with_user_month.group_by("char").agg(last_month=pl.max("month")), on="char"
-)
-
+churn_data = add_churn(user_month, data)
 # %%
-# A user is considered to have churned if their last month of activity is followed by a
-# month of inactivity.
-# So we check if the difference between the last month and the current month is 0 months:
-# That means that the last month is the same as the current month, meaning
-# it's the final month the user has been active.
-# Since the dataset is for a single year, if the last month is december then we
-# don't consider the user to have churned. In other cases, if the difference between
-# the last month and the current month is 0, then we consider the user to have churned.
-
-
-_.select("char", "month", "last_month").with_columns(
-    diff=pl.col("month").dt.month() - pl.col("last_month").dt.month()
-).with_columns(
-    pl.when((pl.col("diff") == 0) & (pl.col("month").dt.month() != 12))
-    .then(1)
-    .otherwise(0)
-    .alias("churned")
-).drop("diff", "last_month").write_parquet("data/wowah_user_month_with_churn.parquet")
-
+churn_data.collect().write_parquet("data/wowah_churn_data.parquet")
 # %%
