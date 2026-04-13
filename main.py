@@ -11,35 +11,50 @@ we only use data from previous months.
 """
 
 # %%
-import polars as pl
-from add_churn import make_user_month
-import skrub
-from skrub import SessionEncoder
-from sklearn.ensemble import HistGradientBoostingClassifier as HGB
-from sklearn.dummy import DummyClassifier
 from datetime import datetime, timedelta
-from skrub import TableVectorizer, DatetimeEncoder, ApplyToCols
+
+import polars as pl
+import skrub
 import skrub.selectors as s
+from sklearn.dummy import DummyClassifier
+from sklearn.ensemble import HistGradientBoostingClassifier as HGB
+from skrub import ApplyToCols, DatetimeEncoder, SessionEncoder, TableVectorizer
+
+from add_churn import make_user_month
+from src.utils import (
+    add_aggregated_features,
+    add_char_features,
+    add_session_features,
+    sample_by_user,
+)
 
 # This needs to start in february to have at least one month of
 MIN_DATE = datetime.strptime("2008-02-01", "%Y-%m-%d")
 # I had to set the max date to november because otherwise I was getting
 # ValueError: No valid specification of the columns.
-MAX_DATE = datetime.strptime("2008-11-30", "%Y-%m-%d")
-
-
+# This is again because we are predicting on month N for month N+1
+MAX_DATE = datetime.strptime("2008-05-30", "%Y-%m-%d")
+# Actual ranges for the full dataset
 # MIN_DATE = datetime.strptime("2005-12-31", "%Y-%m-%d")
 # MAX_DATE = datetime.strptime("2009-01-10", "%Y-%m-%d")
+
+
+# The splitter iterates over the months and selects all the months up to the
+# split point, which is the month in the current iteration.
 class Splitter:
-    def split(self, user_month, has_played):
+    def split(self, user_month, has_played=None):
+        del (
+            has_played
+        )  # Not needed in this splitter since we are only splitting based on the month
         time_range = pl.date_range(MIN_DATE, MAX_DATE, "1mo", eager=True)
         for split_point in time_range:
-            from dateutil.relativedelta import relativedelta
-            
-            test_month = split_point + relativedelta(months=1)
+            # I can either use dateutils.relative delta
+            # test_month = split_point + relativedelta(months=1)
+            # Or do this with polars which is more consistent with the rest of the code
+            test_month = pl.Series([split_point]).dt.offset_by("1mo").first()
             train_idx = (
                 user_month.with_row_index("idx")
-                .filter(pl.col("month") == split_point)["idx"]
+                .filter(pl.col("month") <= split_point)["idx"]
                 .to_list()
             )
             test_idx = (
@@ -47,10 +62,12 @@ class Splitter:
                 .filter(pl.col("month") == test_month)["idx"]
                 .to_list()
             )
+            if train_idx and test_idx:
+                yield train_idx, test_idx
 
-            yield train_idx, test_idx
 
-
+# This function is needed to make sure that we are only ever using historical data
+# up to the given month - 1 month. This is to avoid any leakage in the data.
 @skrub.deferred
 def filter_past(X, historical_data):
     assert X["month"].n_unique() == 1
@@ -58,7 +75,7 @@ def filter_past(X, historical_data):
     historical_data = historical_data.with_columns(
         month=pl.col("timestamp").dt.truncate("1mo")
     )
-    
+
     return historical_data.filter(
         pl.col("month") < (X["month"][0] - timedelta(days=30))
     )
@@ -69,62 +86,11 @@ def load(file):
     return pl.read_parquet(file)
 
 
-@skrub.deferred
-def add_session_features(df):
-    return df.with_columns(
-        pl.col("timestamp").first().over("timestamp_session_id").alias("session_start"),
-        pl.col("timestamp").last().over("timestamp_session_id").alias("session_end"),
-        pl.col("level")
-        .max()
-        .over("timestamp_session_id")
-        .alias("max_level_in_session"),
-        pl.col("level")
-        .n_unique()
-        .over("timestamp_session_id")
-        .alias("levels_in_session"),
-        pl.col("zone")
-        .n_unique()
-        .over("timestamp_session_id")
-        .alias("zones_in_session"),
-    )
-
-
-@skrub.deferred
-def add_char_features(df):
-    return df.with_columns(
-        pl.col("timestamp").first().over("char").alias("char_first_seen"),
-        pl.col("timestamp").last().over("char").alias("char_last_seen"),
-        pl.col("level").max().over("char").alias("max_level"),
-        pl.col("zone").n_unique().over("char").alias("unique_zones_visited"),
-        pl.col("timestamp_session_id").count().over("char").alias("sessions_per_char"),
-        pl.col("timestamp_session_id")
-        .count()
-        .over("timestamp_session_id")
-        .alias("session_duration"),
-        pl.col("guild").n_unique().over("char").alias("guilds_joined"),
-    )
-
-
-@skrub.deferred
-def add_aggregated_features(df):
-    return df.with_columns(
-        pl.col("level").mean().over("race").alias("avg_level_by_race"),
-        pl.col("level").mean().over("charclass").alias("avg_level_by_class"),
-        pl.col("level").mean().over("guild").alias("avg_level_by_guild"),
-        pl.col("level").mean().over("zone").alias("avg_level_by_zone"),
-        pl.col("charclass").count().over("charclass").alias("count_by_charclass"),
-        pl.col("race").count().over("race").alias("count_by_race"),
-        pl.col("char")
-        .count()
-        .over("race", "charclass")
-        .alias("count_by_race_charclass"),
-    )
-
-
-
 def add_features(X, historical_data):
     timestamp_encoder = ApplyToCols(
-        DatetimeEncoder(periodic_encoding="circular"), keep_original=True, cols="timestamp"
+        DatetimeEncoder(periodic_encoding="circular"),
+        keep_original=True,
+        cols="timestamp",
     )
     data_vectorized = (
         historical_data.skb.apply(
@@ -145,12 +111,14 @@ def add_features(X, historical_data):
     data_monthly_with_churn = data_monthly.join(X, on=["char", "month"], how="left")
     return data_monthly_with_churn
 
+
 def apply_session_encoder(data_op):
     # Create a session encoder with a 30 minute timeout
     encoder = SessionEncoder(group_by="char", timestamp_col="timestamp", session_gap=30)
 
     data_with_sessions = data_op.skb.apply(encoder)
     return data_with_sessions
+
 
 def make_data_op():
     user_month_has_played = skrub.var("query")
@@ -174,6 +142,7 @@ def cross_validate():
     )
     return results
 
+
 def evaluate():
     df = pl.read_parquet("data/wowah_churn_data.parquet")
     historical_data_file = "data/wowah_data_raw.parquet"
@@ -182,6 +151,7 @@ def evaluate():
     )
     return results
 
+
 # %%
 
 df = pl.read_parquet("data/wowah_churn_data.parquet")
@@ -189,5 +159,5 @@ data_op = make_data_op()
 # %%
 results = cross_validate()
 # %%
-evaluation_results = evaluate() 
+evaluation_results = evaluate()
 # %%
