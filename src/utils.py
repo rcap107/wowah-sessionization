@@ -9,15 +9,15 @@ def add_session_features(df):
         pl.col("level")
         .max()
         .over("timestamp_session_id")
-        .alias("max_level_in_session"),
+        .alias("session_max_level"),
         pl.col("level")
         .n_unique()
         .over("timestamp_session_id")
-        .alias("levels_in_session"),
+        .alias("session_levels_count"),
         pl.col("zone")
         .n_unique()
         .over("timestamp_session_id")
-        .alias("zones_in_session"),
+        .alias("session_zones_count"),
     )
 
 
@@ -40,16 +40,16 @@ def add_char_features(df):
 @deferred
 def add_aggregated_features(df):
     return df.with_columns(
-        pl.col("level").mean().over("race").alias("avg_level_by_race"),
-        pl.col("level").mean().over("charclass").alias("avg_level_by_class"),
-        pl.col("level").mean().over("guild").alias("avg_level_by_guild"),
-        pl.col("level").mean().over("zone").alias("avg_level_by_zone"),
-        pl.col("charclass").count().over("charclass").alias("count_by_charclass"),
-        pl.col("race").count().over("race").alias("count_by_race"),
+        pl.col("level").mean().over("race").alias("agg_avg_level_by_race"),
+        pl.col("level").mean().over("charclass").alias("agg_avg_level_by_class"),
+        pl.col("level").mean().over("guild").alias("agg_avg_level_by_guild"),
+        pl.col("level").mean().over("zone").alias("agg_avg_level_by_zone"),
+        pl.col("charclass").count().over("charclass").alias("agg_count_by_charclass"),
+        pl.col("race").count().over("race").alias("agg_count_by_race"),
         pl.col("char")
         .count()
         .over("race", "charclass")
-        .alias("count_by_race_charclass"),
+        .alias("agg_count_by_race_charclass"),
     )
 
 
