@@ -44,7 +44,8 @@ MAX_DATE = datetime.strptime("2008-11-30", "%Y-%m-%d")
 # split point, which is the month in the current iteration.
 class Splitter:
     def split(self, user_month, has_played=None):
-        # Not needed in this splitter since we are only splitting based on the month
+        # has_played is not needed in this splitter since we are only splitting 
+        # based on the month
         del has_played
         time_range = pl.date_range(MIN_DATE, MAX_DATE, "1mo", eager=True)
         for split_point in time_range:
