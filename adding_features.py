@@ -32,6 +32,9 @@ historical_data = historical_data.with_columns(
 query_data = df_user_month.filter(
     (pl.col("month") == target_month) & (pl.col("first_month") < target_month)
 )
+query_data = query_data.with_columns(
+    previous_month=pl.col("month").dt.offset_by("-1mo")
+)
 # %%
 from skrub._session_encoder import SessionEncoder
 
@@ -40,31 +43,31 @@ session_encoder = SessionEncoder(
 )
 historical_data_with_sessions = session_encoder.fit_transform(historical_data)
 
-# %%
+# %% [markdown]
 # Fixed features
-# - Character race
-# - Character class
-# - First month seen
+# - [x] Character race
+# - [x]Character class
+# - [x] First month seen
 #
 # Features for the current month
-# - Max level reached in the month
-# - Number of unique zones visited in the month
-# - Most frequent location
-# - Number of guilds joined in the month
-# - Last guild in month
+# - [ ] Max level reached in the month
+# - [ ] Number of unique zones visited in the month
+# - [ ] Most frequent location
+# - [ ] Number of guilds joined in the month
+# - [ ] Last guild in month
 #
 # Session features for the current month
-# - Number of sessions in the month
-# - Total session duration in the month
-# - Average session duration in the month
+# - [x] Number of sessions in the month
+# - [x] Total session duration in the month
+# - [x] Average session duration in the month
 #
 # Playerbase features for the current month
-# - Average level overall
-# - Average level by class
-# - Most frequent location
-# - Number of players overall
-# - Number of players by class
-# - Overall time played by all players
+# - [ ] Average level overall
+# - [ ] Average level by class
+# - [ ] Most frequent location
+# - [ ] Number of players overall
+# - [ ] Number of players by class
+# - [ ] Overall time played by all players
 #
 # Playerbase features up to the current month
 
@@ -75,7 +78,6 @@ def add_fixed_features(df):
 
 
 query_data = query_data.join(add_fixed_features(historical_data), on="char", how="left")
-query_data
 # %%
 # Adding the session start and end to find the session duration
 # Sessions that end within a single heartbeat have the same start and end, thus
@@ -122,6 +124,8 @@ historical_duration = (
     )
     .sort("hist_total_session_duration", descending=True)
 )
+
+
 # %%
 def add_session_features(df):
     session_duration = (
@@ -144,18 +148,66 @@ def add_session_features(df):
     )
     df = df.join(session_duration, on="char", how="left")
     df = (
-        df.with_columns(previous_month=pl.col("month").dt.offset_by("-1mo"))
+        df
         .join(
             monthly_duration,
             left_on=["char", "previous_month"],
             right_on=["char", "month"],
             how="left",
         )
-        .drop("previous_month")
     )
     return df
 
 
-add_session_features(query_data)
+query_data_with_monthly_features = add_session_features(query_data)
+query_data_with_monthly_features
+
+
+# %%
+def add_monthly_player_features(df):
+    _ = hist_session_duration.group_by("char", "month").agg(
+        pl.col("level").max().alias("max_level_month"),
+        pl.col("zone").n_unique().alias("num_zones_month"),
+        pl.col("zone").mode().first().alias("most_freq_zone_month"),
+        pl.col("guild").n_unique().alias("num_guilds_month"),
+        pl.col("guild").last().alias("last_guild_month"),
+        pl.col("guild").first().alias("first_guild_month"),
+    )
+    return (
+        df
+        .join(
+            _,
+            left_on=["char", "previous_month"],
+            right_on=["char", "month"],
+            how="left",
+        )
+    )
+query_data_with_player_features = add_monthly_player_features(query_data_with_monthly_features)
+
+# %%
+def add_class_features(df):
+    _ = (
+        hist_session_duration.with_columns(
+            pl.col("level")
+            .mean()
+            .over(["charclass", "month"])
+            .alias("class_avg_level_month"),
+            pl.col("char")
+            .n_unique()
+            .over(["charclass", "month"])
+            .alias("class_num_players_month"),
+        )
+        .select(
+            "charclass",
+            "month",
+            "class_avg_level_month",
+            "class_num_players_month",
+        )
+        .unique(["charclass", "month"])
+    )
+    return df.join(_, left_on=["charclass", "previous_month"], right_on=["charclass", "month"], how="left")
+
+query_data_with_class_features = add_class_features(query_data_with_player_features)
+query_data_with_class_features
 
 # %%
