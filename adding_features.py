@@ -73,20 +73,12 @@ historical_data_with_sessions = session_encoder.fit_transform(historical_data)
 
 
 # %%
-def add_fixed_features(df):
-    return df.select("char", "race", "charclass").unique("char")
-
-
-query_data = query_data.join(add_fixed_features(historical_data), on="char", how="left")
-# %%
-# Adding the session start and end to find the session duration
-# Sessions that end within a single heartbeat have the same start and end, thus
-# duration = 0. I will replace those with a duration of 1 minute so that the
-# total logged time over a month is not 0. This is useful to distinguish between
-# players that never logged in and players that logged in but had very short sessions.
-
-
 def get_session_duration():
+    # Adding the session start and end to find the session duration
+    # Sessions that end within a single heartbeat have the same start and end, thus
+    # duration = 0. I will replace those with a duration of 1 minute so that the
+    # total logged time over a month is not 0. This is useful to distinguish between
+    # players that never logged in and players that logged in but had very short sessions.
     _ = (
         historical_data_with_sessions.with_columns(
             pl.col("timestamp")
@@ -111,22 +103,42 @@ def get_session_duration():
     return _
 
 
-hist_session_duration = get_session_duration()
-hist_session_duration
-
-# %%
-historical_duration = (
-    hist_session_duration.unique("timestamp_session_id")
-    .group_by("char")
-    .agg(
-        pl.col("session_duration").sum().alias("hist_total_session_duration"),
-        pl.col("session_duration").mean().alias("hist_avg_session_duration"),
+def add_fixed_features(df):
+    return df.join(
+        historical_data.select("char", "race", "charclass").unique("char"),
+        on="char",
+        how="left",
     )
-    .sort("hist_total_session_duration", descending=True)
-)
 
 
-# %%
+def add_class_features(df):
+    _ = (
+        hist_session_duration.with_columns(
+            pl.col("level")
+            .mean()
+            .over(["charclass", "month"])
+            .alias("monthly_class_avg_level"),
+            pl.col("char")
+            .n_unique()
+            .over(["charclass", "month"])
+            .alias("monthly_class_num_players"),
+        )
+        .select(
+            "charclass",
+            "month",
+            "monthly_class_avg_level",
+            "monthly_class_num_players",
+        )
+        .unique(["charclass", "month"])
+    )
+    return df.join(
+        _,
+        left_on=["charclass", "previous_month"],
+        right_on=["charclass", "month"],
+        how="left",
+    )
+
+
 def add_session_features(df):
     session_duration = (
         hist_session_duration.unique("timestamp_session_id")
@@ -147,67 +159,42 @@ def add_session_features(df):
         )
     )
     df = df.join(session_duration, on="char", how="left")
-    df = (
-        df
-        .join(
-            monthly_duration,
-            left_on=["char", "previous_month"],
-            right_on=["char", "month"],
-            how="left",
-        )
+    df = df.join(
+        monthly_duration,
+        left_on=["char", "previous_month"],
+        right_on=["char", "month"],
+        how="left",
     )
     return df
 
 
-query_data_with_monthly_features = add_session_features(query_data)
-query_data_with_monthly_features
-
-
-# %%
 def add_monthly_player_features(df):
     _ = hist_session_duration.group_by("char", "month").agg(
-        pl.col("level").max().alias("max_level_month"),
-        pl.col("zone").n_unique().alias("num_zones_month"),
-        pl.col("zone").mode().first().alias("most_freq_zone_month"),
-        pl.col("guild").n_unique().alias("num_guilds_month"),
-        pl.col("guild").last().alias("last_guild_month"),
-        pl.col("guild").first().alias("first_guild_month"),
+        pl.col("level").max().alias("monthly_max_level_month"),
+        pl.col("zone").n_unique().alias("monthly_num_zones_month"),
+        pl.col("zone").mode().first().alias("monthly_most_freq_zone_month"),
+        pl.col("guild").n_unique().alias("monthly_num_guilds_month"),
+        pl.col("guild").last().alias("monthly_last_guild_month"),
+        pl.col("guild").first().alias("monthly_first_guild_month"),
     )
-    return (
-        df
-        .join(
-            _,
-            left_on=["char", "previous_month"],
-            right_on=["char", "month"],
-            how="left",
-        )
+    return df.join(
+        _,
+        left_on=["char", "previous_month"],
+        right_on=["char", "month"],
+        how="left",
     )
-query_data_with_player_features = add_monthly_player_features(query_data_with_monthly_features)
+
 
 # %%
-def add_class_features(df):
-    _ = (
-        hist_session_duration.with_columns(
-            pl.col("level")
-            .mean()
-            .over(["charclass", "month"])
-            .alias("class_avg_level_month"),
-            pl.col("char")
-            .n_unique()
-            .over(["charclass", "month"])
-            .alias("class_num_players_month"),
-        )
-        .select(
-            "charclass",
-            "month",
-            "class_avg_level_month",
-            "class_num_players_month",
-        )
-        .unique(["charclass", "month"])
-    )
-    return df.join(_, left_on=["charclass", "previous_month"], right_on=["charclass", "month"], how="left")
+def adding_other_features(df, historical_data):
+    df = add_fixed_features(df)
+    hist_session_duration = get_session_duration()
+    df = add_session_features(df)
+    df = add_monthly_player_features(df)
+    df = add_class_features(df)
+    return df
 
-query_data_with_class_features = add_class_features(query_data_with_player_features)
-query_data_with_class_features
+
+adding_other_features(query_data, historical_data)
 
 # %%
