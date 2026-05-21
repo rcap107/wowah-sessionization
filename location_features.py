@@ -12,7 +12,7 @@ from src.utils import get_session_duration, sample_by_user
 
 df = pl.read_parquet("data/wowah_data_raw.parquet")
 
-df = sample_by_user(df)
+# df = sample_by_user(df)
 
 # Filtering so that I'm taking only a single month, April
 
@@ -290,68 +290,88 @@ df_time_in_hub = (
 # - the player spends 10% of their time in 10 different locations -> high entropy
 # the player is likely exploring or hasn't found an efficient place to grind
 
-df_std = (
-    df_with_sessions.with_columns(
-        start_hour=pl.col("timestamp").min().over("session_id").dt.hour(),
-        end_hour=pl.col("timestamp").max().over("session_id").dt.hour(),
-        session_start=pl.col("timestamp").min().over("session_id").dt.hour()
-        * 2
-        * np.pi
-        / 24,
-        session_end=pl.col("timestamp").max().over("session_id").dt.hour()
-        * 2
-        * np.pi
-        / 24,
-        session_start_day=pl.col("timestamp").min().over("session_id").dt.day(),
-        session_end_day=pl.col("timestamp").max().over("session_id").dt.day(),
+def get_temporal_variance(df):
+    df_std = (
+        df.with_columns(
+            start_hour=pl.col("timestamp").min().over("session_id").dt.hour(),
+            end_hour=pl.col("timestamp").max().over("session_id").dt.hour(),
+            session_start=pl.col("timestamp").min().over("session_id").dt.hour()
+            * 2
+            * np.pi
+            / 24,
+            session_end=pl.col("timestamp").max().over("session_id").dt.hour()
+            * 2
+            * np.pi
+            / 24,
+            session_start_day=pl.col("timestamp").min().over("session_id").dt.day(),
+            session_end_day=pl.col("timestamp").max().over("session_id").dt.day(),
+        )
+        .group_by("char")
+        .agg(
+            pl.col("session_start").mean().alias("avg_hour_start"),
+            pl.col("session_start").std().alias("std_hour_start"),
+            pl.col("session_end").mean().alias("avg_hour_end"),
+            pl.col("session_end").std().alias("std_hour_end"),
+            pl.col("start_hour").entropy().alias("entropy_hour_start"),
+            pl.col("end_hour").entropy().alias("entropy_hour_end"),
+            pl.col("session_start_day").std().alias("std_day_start"),
+            pl.col("session_end_day").std().alias("std_day_end"),
+            pl.col("session_duration").dt.total_minutes().mean().alias("avg_duration"),
+            pl.col("session_duration").dt.total_minutes().std().alias("std_duration"),
+            pl.col("session_duration")
+            .dt.total_minutes()
+            .entropy()
+            .alias("entropy_duration"),
+        )
+        .sort("char")
     )
-    .group_by("char")
-    .agg(
-        pl.col("session_start").mean().alias("avg_hour_start"),
-        pl.col("session_start").std().alias("std_hour_start"),
-        pl.col("session_end").mean().alias("avg_hour_end"),
-        pl.col("session_end").std().alias("std_hour_end"),
-        pl.col("start_hour").entropy().alias("entropy_hour_start"),
-        pl.col("end_hour").entropy().alias("entropy_hour_end"),
-        pl.col("session_start_day").std().alias("std_day_start"),
-        pl.col("session_end_day").std().alias("std_day_end"),
-        pl.col("session_duration").dt.total_minutes().mean().alias("avg_duration"),
-        pl.col("session_duration").dt.total_minutes().std().alias("std_duration"),
-        pl.col("session_duration")
-        .dt.total_minutes()
-        .entropy()
-        .alias("entropy_duration"),
-    )
-    .sort("char")
-)
+    return df_std
+    
+df_std = get_temporal_variance(df_with_sessions)
 df_std
 
 # %%
 # Spatial entropy
+# Measuring the spatial entropy of each user. This is done by taking the time spent
+# in each location by each user, then measuring the entropy of the distribution. 
+# I'm measuring the entropy of the distribution rather than the entropy of the 
+# number of visits, which is liable to being skewed by very short visits. 
+#
+# I am filtering out hubs and visits with duration = 1min (i.e., single heartbeats).
+#
+# I am also normalizing the entropy by the number of zones a user has visited to 
+# have a measure of how much of the time has been spent in a single location (low
+# normalized entropy -> focusing on a single location).  
 
-df_zone_session.group_by("char", "zone").agg(pl.sum("zone_session_duration")).filter(
-    pl.col("zone_session_duration").dt.total_minutes() > 1,
-    ~pl.col("zone").is_in(df_rarity.filter(is_hub=True)["zone"].implode())
-).with_columns(
-    p_zone=pl.col("zone_session_duration").dt.total_minutes()
-    / pl.col("zone_session_duration").sum().over("char").dt.total_minutes()
-).with_columns(
-    entropy=pl.col("p_zone").entropy(base=2, normalize=False).over("char")
-).with_columns(
-    normalized_entropy=pl.col("entropy")
-    / pl.when(pl.col("zone").n_unique() > 1)
-    .then(pl.col("zone").n_unique().log(2))
-    .otherwise(1),
-    count_zones=pl.col("zone").count().over("char"),
-).drop("zone", "zone_session_duration", "p_zone").unique("char").sort(
-    "normalized_entropy", descending=True
-)
+def get_spatial_entropy(df, df_rarity):
 
+    df_entropy = df.group_by("char", "zone").agg(pl.sum("zone_session_duration")).filter(
+        pl.col("zone_session_duration").dt.total_minutes() > 1,
+        ~pl.col("zone").is_in(df_rarity.filter(is_hub=True)["zone"].implode())
+    ).with_columns(
+        p_zone=pl.col("zone_session_duration").dt.total_minutes()
+        / pl.col("zone_session_duration").sum().over("char").dt.total_minutes()
+    ).with_columns(
+        entropy=pl.col("p_zone").entropy(base=2, normalize=False).over("char")
+    ).with_columns(
+        normalized_entropy=pl.col("entropy")
+        / pl.when(pl.col("zone").n_unique() > 1)
+        .then(pl.col("zone").n_unique().log(2))
+        .otherwise(1),
+        count_zones=pl.col("zone").count().over("char"),
+    ).drop("zone", "zone_session_duration", "p_zone").unique("char").sort(
+        "normalized_entropy", descending=True
+    )
+    return df_entropy   
+
+df_entropy = get_spatial_entropy(df_zone_session, df_rarity)
+df_entropy
 # %%
 data = (
-    df_users_rarity.join(df_gini_all, on="char")
+    df_users_rarity.join(df_gini_10h, on="char")
     .join(df_time_in_hub, on="char")
     .join(df_std, on="char")
+    .join(df_entropy, on="char")
 )
 # %%
 from sklearn.cluster import HDBSCAN, KMeans
@@ -362,12 +382,12 @@ c.fit(
     data[
         "gini",
         "mean_rarity",
-        "max_rarity",
-        "top_3_time_nohub",
-        "std_hour_start",
-        "std_hour_end",
-        "std_duration",
-        "std_day_start",
+        # "std_hour_start",
+        # "std_hour_end",
+        # "std_duration",
+        # "std_day_start",
+        "normalized_entropy",
+        "entropy_duration"
     ]
 )
 labels = c.labels_
@@ -377,7 +397,7 @@ data = data.with_columns(labels=pl.Series(labels))
 fig, ax = plt.subplots()
 g = sns.scatterplot(
     data=data.to_pandas(),
-    x="std_day_start",
+    x="normalized_entropy",
     y="gini",
     hue="labels",
     palette="tab10",
@@ -385,4 +405,16 @@ g = sns.scatterplot(
 )
 
 # ax.set_xscale("log")
+# %%
+fig, ax = plt.subplots()
+g = sns.scatterplot(
+    data=data.filter(~pl.col("labels").is_in([-1, 6])).to_pandas(),
+    x="entropy_duration",
+    y="gini",
+    hue="labels",
+    palette="tab10",
+    ax=ax,
+)
+
+
 # %%
