@@ -1,4 +1,5 @@
 # %%
+import numpy as np
 import datetime
 
 import matplotlib.pyplot as plt
@@ -139,29 +140,6 @@ def add_player_rarity(df_with_sessions, df_rarity):
 df_users_rarity = add_player_rarity(df_with_sessions, df_rarity)
 df_users_rarity
 # %%
-# Weighted rarity rescales the time spent in each location by the location's rarity.
-# If a location is rare, the time that is spent in the location is therefore increased,
-# if a location is a hub, then the time is reduced.
-#
-# Then, I add the difference between the "real" time and the "adjusted" time, and
-# the relative difference.
-# I am not convinced this is a useful metric
-
-df_weighted_rarity = (
-    df_zone_session.join(df_rarity, on="zone")
-    .with_columns(weighted_time=pl.col("rarity") * pl.col("zone_session_duration"))
-    .unique("zone_session_id")
-    .with_columns(sum_weighted_time=pl.col("weighted_time").sum().over("char"))
-    .unique("char")
-)
-_ = (
-    df_weighted_rarity.join(total_logged_time, on="char")
-    .select("char", "total_logged_time", "sum_weighted_time")
-    .with_columns(diff=pl.col("total_logged_time") - pl.col("sum_weighted_time"))
-    .with_columns(diff_perc=pl.col("diff") / pl.col("total_logged_time"))
-)
-
-# %%
 # Level-adjusted offset tracks situation in which a player is going to a location
 # whose average level is different from their level. If the value is < 1, then
 # the player is in a location whose average level is higher than the player level,
@@ -190,10 +168,25 @@ sns.histplot(data=above_70.to_pandas(), x="level_adj_offset", ax=ax)
 
 
 # %%
-# Measuring the Gini coefficient of the time spent by location.
+# Measuring the Gini coefficient of the time spent by location. This metric shows
+# the distribution of time spent by a user across different locations.
+# The idea is that if a user visits a lot of different for a (somewhat) equal length
+# of time, they are more likely to be a "casual explorer", while if a player spends
+# a very large fraction of their time in a small number of locations they are more
+# likely to be "grinding" specific locations.
+#
+# This is interesting to compare with the average rarity of the locations that
+# each player visits.
+#
+# The coefficient is measured by finding the amount of time a user spends in each
+# location in a month.
+#
+# Some factors I might want to consider:
+# - Calculate the Gini coefficient only for non-hub locations
+# - Filter out low-playtime players
 
 
-def gini(group: pl.Series):
+def gini(group: pl.DataFrame):
     n = len(group)
     sorted = (
         group.sort("zone_session_duration")
@@ -205,27 +198,131 @@ def gini(group: pl.Series):
             / n
         )
     )
-    # r = n + 1 - 2 * cumulative.sum() / cumulative.last() / n
     return sorted.select("char", "gini").unique()
 
 
+def get_location_gini(df):
+    df_with_gini = (
+        df.group_by("char", "zone")
+        .agg(pl.sum("zone_session_duration"))
+        .group_by("char")
+        .map_groups(gini)
+    )
+    return df_with_gini
+
+
 # %%
-df_zone_session
+# Comparing the distribution of Gini scores with and without hubs
+df_gini_hub = get_location_gini(df_zone_session.join(df_rarity, on="zone"))
+df_gini_nohub = get_location_gini(
+    df_zone_session.join(df_rarity, on="zone").filter(~pl.col("is_hub"))
+)
+fig, ax = plt.subplots()
+sns.histplot(data=df_gini_hub.to_pandas(), x="gini", ax=ax, label="with hubs")
+sns.histplot(data=df_gini_nohub.to_pandas(), x="gini", ax=ax, label="no hubs")
+ax.legend()
+
 # %%
-df_with_gini = (
+# Comparing the distribution of Gini scores for players that have at least
+# 10 total hours over the month, against all players
+players_10h = df_zone_session.join(total_logged_time, on="char").filter(
+    pl.col("total_logged_time").dt.total_hours() > 10
+)
+# %%
+df_gini_10h = get_location_gini(players_10h.join(df_rarity, on="zone"))
+df_gini_all = get_location_gini(df_zone_session.join(df_rarity, on="zone"))
+
+fig, ax = plt.subplots()
+sns.histplot(
+    data=df_gini_all.to_pandas(), x="gini", ax=ax, label="all players", bins=20
+)
+sns.histplot(
+    data=df_gini_10h.to_pandas(), x="gini", ax=ax, label=">10h played", bins=20
+)
+ax.legend()
+
+
+# %%
+# %%
+df_time_in_hub = (
     df_zone_session.group_by("char", "zone")
     .agg(pl.sum("zone_session_duration"))
-    .group_by("char")
-    .map_groups(gini)
+    .join(df_rarity, on="zone")
+    .with_columns(
+        top_3_time=pl.col("zone_session_duration").top_k(3).sum().over("char")
+        / pl.col("zone_session_duration").sum().over("char"),
+        top_3_time_nohub=pl.col("zone_session_duration")
+        .filter(~pl.col("is_hub"))
+        .top_k(3)
+        .sum()
+        .over("char")
+        / pl.col("zone_session_duration").sum().over("char"),
+    )
+    .select("char", "top_3_time_nohub", "top_3_time")
+    .unique("char")
 )
-df_with_gini
 # %%
-for gidx, g in _.group_by("char"):
-    d = g.pipe(gini)
-    break
-d
-# %%
-from skrub import TableReport
 
-TableReport(_)
+
+# %%
+df_std = (
+    df_with_sessions.with_columns(
+        session_start=pl.col("timestamp").min().over("session_id").dt.hour()
+        * 2
+        * np.pi
+        / 24,
+        session_end=pl.col("timestamp").max().over("session_id").dt.hour()
+        * 2
+        * np.pi
+        / 24,
+    )
+    .group_by("char")
+    .agg(
+        pl.col("session_start").mean().alias("avg_hour_start"),
+        pl.col("session_start").std().alias("std_hour_start"),
+        pl.col("session_end").mean().alias("avg_hour_end"),
+        pl.col("session_end").std().alias("std_hour_end"),
+        pl.col("session_duration").dt.total_minutes().mean().alias("avg_duration"),
+        pl.col("session_duration").dt.total_minutes().std().alias("std_duration"),
+    )
+    .sort("char")
+)
+
+# %%
+data = (
+    df_users_rarity.join(df_gini_all, on="char")
+    .join(df_time_in_hub, on="char")
+    .join(df_std, on="char")
+)
+# %%
+from sklearn.cluster import HDBSCAN, KMeans
+
+# c = KMeans(n_clusters=8)
+c = HDBSCAN(min_cluster_size=25)
+c.fit(
+    data[
+        "gini",
+        "mean_rarity",
+        "max_rarity",
+        "top_3_time_nohub",
+        "std_hour_start",
+        "std_hour_end",
+        "std_duration",
+    ]
+)
+labels = c.labels_
+
+data = data.with_columns(labels=pl.Series(labels))
+
+fig, ax = plt.subplots()
+g = sns.scatterplot(
+    data=data.to_pandas(),
+    x="std_duration",
+    y="gini",
+    hue="labels",
+    palette="tab10",
+    ax=ax
+)
+
+ax.set_xscale("log")
 # %%
