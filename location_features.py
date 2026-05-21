@@ -228,7 +228,6 @@ ax.legend()
 players_10h = df_zone_session.join(total_logged_time, on="char").filter(
     pl.col("total_logged_time").dt.total_hours() > 10
 )
-# %%
 df_gini_10h = get_location_gini(players_10h.join(df_rarity, on="zone"))
 df_gini_all = get_location_gini(df_zone_session.join(df_rarity, on="zone"))
 
@@ -243,7 +242,9 @@ ax.legend()
 
 
 # %%
-# %%
+# Getting the fraction of time that is spent in the top 3 locations, and the
+# fraction that is spent in top-3 non-hub locations.
+
 df_time_in_hub = (
     df_zone_session.group_by("char", "zone")
     .agg(pl.sum("zone_session_duration"))
@@ -261,12 +262,38 @@ df_time_in_hub = (
     .select("char", "top_3_time_nohub", "top_3_time")
     .unique("char")
 )
-# %%
-
 
 # %%
+# Getting the variability in sessions.
+# I'm getting the standard deviation of the start and end hours after converting
+# them to radians (so that 23 is close to 0), and the start and end day.
+# High variance in the hour of day/day of week means that the user connects at
+# random times, low variance means that the player tends to play at the same time
+# every day (more dedicated).
+# High variance in the session duration may mean that the player has periods where
+# they play for a long time (grinding or events), low variance players have a
+# consistent schedule.
+#
+# Entropy can be used to measure how "unpredictable" a player is depending on their
+# behavior. It can be temporal, spatial, or behavioral.
+#
+# Temporal entropy: hour of day, day of week
+# - the player logs in at 8pm every day -> low entropy, the player has a habit,
+# the player is likely to be dedicated -> likely high retention
+# - the player logs in at random times every day -> high entropy, the player connects
+# whenever they have some time -> likely to not be very dedicated -> low retention
+#
+# Spatial entropy: locations
+# - the player spends most of their time in few locations -> low entropy, likely
+# the player is grinding a specific location and is optimizing their gameplay ->
+# dedicated player -> high retention
+# - the player spends 10% of their time in 10 different locations -> high entropy
+# the player is likely exploring or hasn't found an efficient place to grind
+
 df_std = (
     df_with_sessions.with_columns(
+        start_hour=pl.col("timestamp").min().over("session_id").dt.hour(),
+        end_hour=pl.col("timestamp").max().over("session_id").dt.hour(),
         session_start=pl.col("timestamp").min().over("session_id").dt.hour()
         * 2
         * np.pi
@@ -275,6 +302,8 @@ df_std = (
         * 2
         * np.pi
         / 24,
+        session_start_day=pl.col("timestamp").min().over("session_id").dt.day(),
+        session_end_day=pl.col("timestamp").max().over("session_id").dt.day(),
     )
     .group_by("char")
     .agg(
@@ -282,10 +311,40 @@ df_std = (
         pl.col("session_start").std().alias("std_hour_start"),
         pl.col("session_end").mean().alias("avg_hour_end"),
         pl.col("session_end").std().alias("std_hour_end"),
+        pl.col("start_hour").entropy().alias("entropy_hour_start"),
+        pl.col("end_hour").entropy().alias("entropy_hour_end"),
+        pl.col("session_start_day").std().alias("std_day_start"),
+        pl.col("session_end_day").std().alias("std_day_end"),
         pl.col("session_duration").dt.total_minutes().mean().alias("avg_duration"),
         pl.col("session_duration").dt.total_minutes().std().alias("std_duration"),
+        pl.col("session_duration")
+        .dt.total_minutes()
+        .entropy()
+        .alias("entropy_duration"),
     )
     .sort("char")
+)
+df_std
+
+# %%
+# Spatial entropy
+
+df_zone_session.group_by("char", "zone").agg(pl.sum("zone_session_duration")).filter(
+    pl.col("zone_session_duration").dt.total_minutes() > 1,
+    ~pl.col("zone").is_in(df_rarity.filter(is_hub=True)["zone"].implode())
+).with_columns(
+    p_zone=pl.col("zone_session_duration").dt.total_minutes()
+    / pl.col("zone_session_duration").sum().over("char").dt.total_minutes()
+).with_columns(
+    entropy=pl.col("p_zone").entropy(base=2, normalize=False).over("char")
+).with_columns(
+    normalized_entropy=pl.col("entropy")
+    / pl.when(pl.col("zone").n_unique() > 1)
+    .then(pl.col("zone").n_unique().log(2))
+    .otherwise(1),
+    count_zones=pl.col("zone").count().over("char"),
+).drop("zone", "zone_session_duration", "p_zone").unique("char").sort(
+    "normalized_entropy", descending=True
 )
 
 # %%
@@ -298,7 +357,7 @@ data = (
 from sklearn.cluster import HDBSCAN, KMeans
 
 # c = KMeans(n_clusters=8)
-c = HDBSCAN(min_cluster_size=25)
+c = HDBSCAN(min_cluster_size=5)
 c.fit(
     data[
         "gini",
@@ -308,6 +367,7 @@ c.fit(
         "std_hour_start",
         "std_hour_end",
         "std_duration",
+        "std_day_start",
     ]
 )
 labels = c.labels_
@@ -317,12 +377,12 @@ data = data.with_columns(labels=pl.Series(labels))
 fig, ax = plt.subplots()
 g = sns.scatterplot(
     data=data.to_pandas(),
-    x="std_duration",
+    x="std_day_start",
     y="gini",
     hue="labels",
     palette="tab10",
-    ax=ax
+    ax=ax,
 )
 
-ax.set_xscale("log")
+# ax.set_xscale("log")
 # %%
