@@ -23,14 +23,14 @@ from sklearn.ensemble import HistGradientBoostingClassifier as HGB
 from skrub import ApplyToCols, DatetimeEncoder, SessionEncoder, TableVectorizer
 from sklearn.impute import SimpleImputer
 
-from add_churn import make_user_month
 from src.utils import (
-    add_aggregated_features,
-    add_char_features,
-    add_session_features,
     sample_by_user,
 )
-from adding_features import adding_other_features
+from adding_features import (
+    add_general_features,
+    get_session_duration,
+    add_location_features,
+)
 
 # This needs to start in February to have one month of historical data and one month
 # of break before I can build features.
@@ -38,7 +38,7 @@ from adding_features import adding_other_features
 # ValueError: No valid specification of the columns.
 # This is again because we are predicting on month N for month N+1
 MIN_DATE = datetime.strptime("2008-02-01", "%Y-%m-%d")
-MAX_DATE = datetime.strptime("2008-11-30", "%Y-%m-%d")
+MAX_DATE = datetime.strptime("2008-06-30", "%Y-%m-%d")
 # Actual ranges for the full dataset
 # MIN_DATE = datetime.strptime("2005-12-31", "%Y-%m-%d")
 # MAX_DATE = datetime.strptime("2009-01-10", "%Y-%m-%d")
@@ -88,12 +88,20 @@ def add_features(X, historical_data):
     # Create a session encoder with a 30 minute timeout
     # This encoder is used as a stateless transformer so it is refitted for every
     # month
-    encoder = SessionEncoder(group_by="char", timestamp_col="timestamp", session_gap=30)
+    session_encoder = SessionEncoder(
+        group_by="char", timestamp_col="timestamp", session_gap=30
+    )
     historical_data = historical_data.with_columns(
         month=pl.col("timestamp").dt.truncate("1mo")
     )
     last_month = X["month"].max()
 
+    # Grouping by character and zone so that I can get the time spent in each zone
+    # Even if users leave the zone, this lets me find how much time a user spends in
+    # a given zone
+    session_encoder_zone = SessionEncoder(
+        group_by=["char", "zone"], timestamp_col="timestamp", session_gap=30
+    )
     # Adding fixed features: these features are fixed by character so they don't
     # change over time.
     # historical_data is selected up until the last month because if I select only
@@ -105,30 +113,63 @@ def add_features(X, historical_data):
         .unique("char"),
         on="char",
         how="left",
-    ).with_row_index()
-    
+    ).with_row_index()  # adding row index so that I can reorder at the end after
+    # concatenating
+    # kinda defeats the point of using data ops but I think it simplifies the code
+
+    # The "last month is the split month, for which I have no features.
     X_last_month = filter_df_by_month(X, last_month)
-    months = historical_data.filter(pl.col("month").dt.month() < X["month"].dt.month().max())[
-        "month"
-    ].unique()
+
+    # Selecting all the months up until "last month" excluded to build the features
+    months = historical_data.filter(
+        pl.col("month").dt.month() < X["month"].dt.month().max()
+    )["month"].unique()
     # This is used to add the historical data up to the given month
     for month in months:
-        # I need to truncate the historical timestamp to month to be able to
-        # compare it with the month in the target
+        # I'm building the history based only on the current (past) month
         kept_historical_data = filter_df_by_month(historical_data, month)
-        this_month_X = filter_df_by_month(X, month)
-        historical_data_with_sessions = encoder.fit_transform(kept_historical_data)
-        df_with_features = adding_other_features(
+        # Build features only on the current month
+        this_month_X = kept_historical_data["char", "month"]
+
+        # Session features: a session lasts from the first heartbeat until the last
+        historical_data_with_sessions = session_encoder.fit_transform(
+            kept_historical_data
+        )
+        historical_data_with_sessions = get_session_duration(
+            historical_data_with_sessions
+        )
+
+        # Zone-session features: a session lasts from the first time a character
+        # enters a zone to the moment it leaves it
+        # This is useful to get zone-specific features
+        historical_data_zone_sessions = session_encoder_zone.fit_transform(
+            kept_historical_data
+        )
+        historical_data_zone_sessions = get_session_duration(
+            historical_data_zone_sessions
+        )
+
+        df_with_features = add_general_features(
             this_month_X, historical_data_with_sessions
         )
+
+        # df_with_features = add_location_features(
+        #     df_with_features,
+        #     historical_data_zone_sessions,
+        #     historical_data_with_sessions,
+        # )
+
+        # this step won't be needed once #2069 gets merged
         df_with_features = df_with_features.with_columns(
             cs.duration().dt.total_minutes()
         )
         features_by_month.append(df_with_features)
+        assert len(df_with_features) == len (this_month_X)
 
     X_res = pl.concat(features_by_month)
     X_res = pl.concat([X_res, X_last_month], how="diagonal")
     X_res = X_res.sort("index").drop("index")
+
 
     return X_res
     # return all_features
@@ -148,8 +189,8 @@ def make_data_op():
     all_features = add_features(X, historical_data)
     encoded = all_features.skb.apply(skrub.TableVectorizer())
     # data_op = encoded.skb.apply(SimpleImputer()).skb.apply(LogisticRegression(), y=y)
-    # data_op = encoded.skb.apply(HGB(), y=y)
-    data_op = encoded.skb.apply(DummyClassifier(), y=y)
+    data_op = encoded.skb.apply(HGB(), y=y)
+    # data_op = encoded.skb.apply(DummyClassifier(), y=y)
     return data_op
 
 
@@ -179,6 +220,7 @@ df = sample_by_user(df, fraction=0.1)
 data_op = make_data_op()
 # %%
 results = cross_validate()
+print(results)
 # %%
 # evaluation_results = evaluate()
 # %%
