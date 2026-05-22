@@ -6,42 +6,11 @@ import datetime
 import skrub
 from src.utils import (
     sample_by_user,
+    get_session_duration
 )
 
-
-df = pl.read_parquet("data/wowah_data_raw.parquet")
-df_user_month = pl.read_parquet("data/wowah_churn_data.parquet").select(
-    "char", "month", "first_month"
-)
-# %%
-df_user_month = sample_by_user(df_user_month, fraction=0.1)
-df = df.with_columns(guild=pl.col("guild").replace(-1, None))
-# %%
-df
-# %%
-# Here I define the target month, i.e., the month for which I want to predict churn.
-# The cutoff month is the month before the target month: the idea is that during
-# the "cutoff month" we can take some action to prevent churn in the "target month".
-# I then filter the historical data to only include data before the cutoff month.
-target_month = datetime.datetime(2008, 6, 1)
-cutoff_month = pl.Series([target_month]).dt.offset_by("-1mo").first()
-historical_data = df.filter(pl.col("timestamp") < target_month)
-historical_data = historical_data.with_columns(
-    month=pl.col("timestamp").dt.truncate("1mo")
-)
-query_data = df_user_month.filter(
-    (pl.col("month") == target_month) & (pl.col("first_month") < target_month)
-)
-query_data = query_data.with_columns(
-    previous_month=pl.col("month").dt.offset_by("-1mo")
-)
-# %%
 from skrub._session_encoder import SessionEncoder
 
-session_encoder = SessionEncoder(
-    group_by="char", timestamp_col="timestamp", session_gap=30
-)
-historical_data_with_sessions = session_encoder.fit_transform(historical_data)
 
 # %% [markdown]
 # Fixed features
@@ -71,39 +40,10 @@ historical_data_with_sessions = session_encoder.fit_transform(historical_data)
 #
 # Playerbase features up to the current month
 
-
-# %%
-def get_session_duration():
-    # Adding the session start and end to find the session duration
-    # Sessions that end within a single heartbeat have the same start and end, thus
-    # duration = 0. I will replace those with a duration of 1 minute so that the
-    # total logged time over a month is not 0. This is useful to distinguish between
-    # players that never logged in and players that logged in but had very short sessions.
-    _ = (
-        historical_data_with_sessions.with_columns(
-            pl.col("timestamp")
-            .first()
-            .over("timestamp_session_id")
-            .alias("session_start"),
-            pl.col("timestamp")
-            .last()
-            .over("timestamp_session_id")
-            .alias("session_end"),
-        )
-        .with_columns(
-            (pl.col("session_end") - pl.col("session_start")).alias("session_duration"),
-        )
-        .with_columns(
-            pl.when(pl.col("session_duration") == pl.duration(microseconds=0))
-            .then(pl.duration(minutes=1))
-            .otherwise(pl.col("session_duration"))
-            .alias("session_duration")
-        )
-    )
-    return _
+    
 
 
-def add_fixed_features(df):
+def add_fixed_features(df, historical_data):
     return df.join(
         historical_data.select("char", "race", "charclass").unique("char"),
         on="char",
@@ -111,7 +51,8 @@ def add_fixed_features(df):
     )
 
 
-def add_class_features(df):
+def add_class_features(df, hist_session_duration):
+    # Add monthly class-based features
     _ = (
         hist_session_duration.with_columns(
             pl.col("level")
@@ -133,22 +74,13 @@ def add_class_features(df):
     )
     return df.join(
         _,
-        left_on=["charclass", "previous_month"],
+        left_on=["charclass", "month"],
         right_on=["charclass", "month"],
         how="left",
     )
 
 
-def add_session_features(df):
-    session_duration = (
-        hist_session_duration.unique("timestamp_session_id")
-        .group_by("char")
-        .agg(
-            pl.col("session_duration").sum().alias("hist_total_session_duration"),
-            pl.col("session_duration").mean().alias("hist_avg_session_duration"),
-            pl.col("session_duration").count().alias("hist_num_sessions"),
-        )
-    )
+def add_session_features(df, hist_session_duration):
     monthly_duration = (
         hist_session_duration.unique("timestamp_session_id")
         .group_by("char", "month")
@@ -158,17 +90,16 @@ def add_session_features(df):
             pl.col("session_duration").count().alias("monthly_num_sessions"),
         )
     )
-    df = df.join(session_duration, on="char", how="left")
     df = df.join(
         monthly_duration,
-        left_on=["char", "previous_month"],
+        left_on=["char", "month"],
         right_on=["char", "month"],
         how="left",
     )
     return df
 
 
-def add_monthly_player_features(df):
+def add_monthly_player_features(df, hist_session_duration):
     _ = hist_session_duration.group_by("char", "month").agg(
         pl.col("level").max().alias("monthly_max_level_month"),
         pl.col("zone").n_unique().alias("monthly_num_zones_month"),
@@ -179,7 +110,7 @@ def add_monthly_player_features(df):
     )
     return df.join(
         _,
-        left_on=["char", "previous_month"],
+        left_on=["char", "month"],
         right_on=["char", "month"],
         how="left",
     )
@@ -187,14 +118,43 @@ def add_monthly_player_features(df):
 
 # %%
 def adding_other_features(df, historical_data):
-    df = add_fixed_features(df)
-    hist_session_duration = get_session_duration()
-    df = add_session_features(df)
-    df = add_monthly_player_features(df)
-    df = add_class_features(df)
+    hist_session_duration = get_session_duration(historical_data)
+    df = add_session_features(df, hist_session_duration)
+    df = add_monthly_player_features(df, hist_session_duration)
+    df = add_class_features(df, hist_session_duration)
     return df
 
-
-adding_other_features(query_data, historical_data)
-
 # %%
+if __name__ == "main":
+    df = pl.read_parquet("data/wowah_data_raw.parquet")
+    df_user_month = pl.read_parquet("data/wowah_churn_data.parquet").select(
+        "char", "month", "first_month"
+    )
+    # %%
+    df_user_month = sample_by_user(df_user_month, fraction=0.1)
+    df = df.with_columns(guild=pl.col("guild").replace(-1, None))
+    # Here I define the target month, i.e., the month for which I want to predict churn.
+    # The cutoff month is the month before the target month: the idea is that during
+    # the "cutoff month" we can take some action to prevent churn in the "target month".
+    # I then filter the historical data to only include data before the cutoff month.
+    target_month = datetime.datetime(2008, 6, 1)
+    cutoff_month = pl.Series([target_month]).dt.offset_by("-1mo").first()
+    historical_data = df.filter(pl.col("timestamp") < target_month)
+    historical_data = historical_data.with_columns(
+        month=pl.col("timestamp").dt.truncate("1mo")
+    )
+    query_data = df_user_month.filter(
+        (pl.col("month") == target_month) & (pl.col("first_month") < target_month)
+    )
+    query_data = query_data.with_columns(
+        previous_month=pl.col("month").dt.offset_by("-1mo")
+    )
+    # %%
+
+    session_encoder = SessionEncoder(
+        group_by="char", timestamp_col="timestamp", session_gap=30
+    )
+    historical_data_with_sessions = session_encoder.fit_transform(historical_data)
+    adding_other_features(query_data, historical_data_with_sessions)
+    # %%
+    get_session_duration(historical_data_with_sessions)
