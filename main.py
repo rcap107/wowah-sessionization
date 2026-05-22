@@ -37,7 +37,7 @@ from adding_features import adding_other_features
 # I had to set the max date to november because otherwise I was getting
 # ValueError: No valid specification of the columns.
 # This is again because we are predicting on month N for month N+1
-MIN_DATE = datetime.strptime("2008-03-01", "%Y-%m-%d")
+MIN_DATE = datetime.strptime("2008-02-01", "%Y-%m-%d")
 MAX_DATE = datetime.strptime("2008-11-30", "%Y-%m-%d")
 # Actual ranges for the full dataset
 # MIN_DATE = datetime.strptime("2005-12-31", "%Y-%m-%d")
@@ -61,7 +61,7 @@ class Splitter:
             # Train indices are up to split_point excluded
             train_idx = (
                 user_month.with_row_index("idx")
-                .filter(pl.col("month") < split_point)["idx"]
+                .filter(pl.col("month") <= split_point)["idx"]
                 .to_list()
             )
             # Test indices are for the month after split_point
@@ -106,12 +106,13 @@ def add_features(X, historical_data):
         on="char",
         how="left",
     ).with_row_index()
-    months = X.filter(pl.col("month").dt.month() <= X["month"].dt.month().max())[
+    
+    X_last_month = filter_df_by_month(X, last_month)
+    months = historical_data.filter(pl.col("month").dt.month() < X["month"].dt.month().max())[
         "month"
     ].unique()
     # This is used to add the historical data up to the given month
     for month in months:
-        print("Current month: ", month.strftime("%Y-%m-%d"))
         # I need to truncate the historical timestamp to month to be able to
         # compare it with the month in the target
         kept_historical_data = filter_df_by_month(historical_data, month)
@@ -125,7 +126,9 @@ def add_features(X, historical_data):
         )
         features_by_month.append(df_with_features)
 
-    X_res = pl.concat(features_by_month).sort("index").drop("index")
+    X_res = pl.concat(features_by_month)
+    X_res = pl.concat([X_res, X_last_month], how="diagonal")
+    X_res = X_res.sort("index").drop("index")
 
     return X_res
     # return all_features

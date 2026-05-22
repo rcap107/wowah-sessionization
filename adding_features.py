@@ -40,17 +40,6 @@ from skrub._session_encoder import SessionEncoder
 #
 # Playerbase features up to the current month
 
-    
-
-
-def add_fixed_features(df, historical_data):
-    return df.join(
-        historical_data.select("char", "race", "charclass").unique("char"),
-        on="char",
-        how="left",
-    )
-
-
 def add_class_features(df, hist_session_duration):
     # Add monthly class-based features
     _ = (
