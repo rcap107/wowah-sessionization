@@ -79,17 +79,17 @@ def filter_df_by_month(df, month):
     return df.filter(pl.col("month") == month)
 
 
+# %%
 # This function is needed to make sure that we are only ever using historical data
 # up to the given month - 1 month. This is to avoid any leakage in the data.
-@skrub.deferred
-def add_features(X, historical_data):
+def add_features(X, historical_data, session_gap=30):
     features_by_month = []
 
     # Create a session encoder with a 30 minute timeout
     # This encoder is used as a stateless transformer so it is refitted for every
     # month
     session_encoder = SessionEncoder(
-        group_by="char", timestamp_col="timestamp", session_gap=30
+        group_by="char", timestamp_col="timestamp", session_gap=session_gap
     )
     historical_data = historical_data.with_columns(
         month=pl.col("timestamp").dt.truncate("1mo")
@@ -100,7 +100,7 @@ def add_features(X, historical_data):
     # Even if users leave the zone, this lets me find how much time a user spends in
     # a given zone
     session_encoder_zone = SessionEncoder(
-        group_by=["char", "zone"], timestamp_col="timestamp", session_gap=30
+        group_by=["char", "zone"], timestamp_col="timestamp", session_gap=session_gap
     )
     # Adding fixed features: these features are fixed by character so they don't
     # change over time.
@@ -113,23 +113,18 @@ def add_features(X, historical_data):
         .unique("char"),
         on="char",
         how="left",
+        maintain_order="left",
     ).with_row_index()  # adding row index so that I can reorder at the end after
     # concatenating
     # kinda defeats the point of using data ops but I think it simplifies the code
 
-    # The "last month is the split month, for which I have no features.
-    X_last_month = filter_df_by_month(X, last_month)
-
-    # Selecting all the months up until "last month" excluded to build the features
-    months = historical_data.filter(
-        pl.col("month").dt.month() < X["month"].dt.month().max()
-    )["month"].unique()
     # This is used to add the historical data up to the given month
-    for month in months:
+    for month in X['month'].unique():
+        this_month_X = filter_df_by_month(X, month)
+
         # I'm building the history based only on the current (past) month
-        kept_historical_data = filter_df_by_month(historical_data, month)
+        kept_historical_data = historical_data.with_columns(pl.col('month').dt.offset_by('2mo')).filter(pl.col('month') == month)
         # Build features only on the current month
-        this_month_X = kept_historical_data["char", "month"]
 
         # Session features: a session lasts from the first heartbeat until the last
         historical_data_with_sessions = session_encoder.fit_transform(
@@ -167,7 +162,6 @@ def add_features(X, historical_data):
         assert len(df_with_features) == len (this_month_X)
 
     X_res = pl.concat(features_by_month)
-    X_res = pl.concat([X_res, X_last_month], how="diagonal")
     X_res = X_res.sort("index").drop("index")
 
 
@@ -175,23 +169,77 @@ def add_features(X, historical_data):
     # return all_features
 
 
-@skrub.deferred
 def load(file):
     return pl.read_parquet(file)
 
 
+# %%
+df = pl.read_parquet("data/wowah_churn_data.parquet")
+df = sample_by_user(df, fraction=0.1)
+
+
+user_month_has_played = skrub.var("query", df)
+X = user_month_has_played["char", "month"].skb.mark_as_X(cv=Splitter())
+y = user_month_has_played["has_played"].skb.mark_as_y()
+historical_data_file = skrub.var("historical_data_file",  "data/wowah_data_raw.parquet")
+historical_data = historical_data_file.skb.apply_func(load)
+historical_data
+
+# %%
+session_gap = skrub.choose_from([30, 60], name="session_gap")
+all_features = X.skb.apply_func(add_features, historical_data, session_gap=session_gap)
+all_features
+# %%
+
+encoded = all_features.skb.apply(skrub.TableVectorizer())
+# data_op = encoded.skb.apply(SimpleImputer()).skb.apply(LogisticRegression(), y=y)
+data_op = encoded.skb.apply(HGB(), y=y)
+# data_op = encoded.skb.apply(DummyClassifier(), y=y)
+
+# %%
+data_op.skb.full_report()
+
+# %%
+split = data_op.skb.train_test_split()
+
+# %%
+split['X_train']['month'].max()
+
+# %%
+
+split['X_test']['month'].min()
+
+# %%
+learner = data_op.skb.make_learner()
+learner.report(environment=split['train'], mode='fit')
+
+# %%
+learner.report(environment=split['test'], mode='predict')
+
+# %%
+data_op.skb.cross_validate()
+# %%
 def make_data_op():
     user_month_has_played = skrub.var("query")
     X = user_month_has_played["char", "month"].skb.mark_as_X(cv=Splitter())
     y = user_month_has_played["has_played"].skb.mark_as_y()
     historical_data_file = skrub.var("historical_data_file")
-    historical_data = load(historical_data_file)
-    all_features = add_features(X, historical_data)
+    historical_data = historical_data_file.skb.apply_func(load)
+    all_features = X.skb.apply_func(add_features, historical_data)
     encoded = all_features.skb.apply(skrub.TableVectorizer())
     # data_op = encoded.skb.apply(SimpleImputer()).skb.apply(LogisticRegression(), y=y)
     data_op = encoded.skb.apply(HGB(), y=y)
     # data_op = encoded.skb.apply(DummyClassifier(), y=y)
     return data_op
+
+# %%
+
+
+def get_env():
+    df = pl.read_parquet("data/wowah_churn_data.parquet")
+    df = sample_by_user(df, fraction=0.1)
+    historical_data_file = "data/wowah_data_raw.parquet"
+    return {"query": df, "historical_data_file": historical_data_file}
 
 
 def cross_validate():
@@ -212,6 +260,9 @@ def evaluate():
     )
     return results
 
+# %%
+env = get_env()
+make_data_op().skb.full_report(env)
 
 # %%
 
