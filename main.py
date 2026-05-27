@@ -130,7 +130,7 @@ def add_features(X, historical_data):
         this_month_X = filter_df_by_month(X, month)
 
         # I'm building the history based only on the current (past) month
-        kept_historical_data = historical_data.filter(pl.col('month').dt.offset_by('1mo') == month)
+        kept_historical_data = historical_data.with_columns(pl.col('month').dt.offset_by('1mo')).filter(pl.col('month') == month)
         # Build features only on the current month
 
         # Session features: a session lasts from the first heartbeat until the last
