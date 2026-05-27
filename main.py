@@ -118,19 +118,12 @@ def add_features(X, historical_data):
     # concatenating
     # kinda defeats the point of using data ops but I think it simplifies the code
 
-    # The "last month is the split month, for which I have no features.
-    X_last_month = filter_df_by_month(X, last_month)
-
-    # Selecting all the months up until "last month" excluded to build the features
-    months = historical_data.filter(
-        pl.col("month").dt.month() < X["month"].dt.month().max()
-    )["month"].unique()
     # This is used to add the historical data up to the given month
     for month in X['month'].unique():
         this_month_X = filter_df_by_month(X, month)
 
         # I'm building the history based only on the current (past) month
-        kept_historical_data = historical_data.with_columns(pl.col('month').dt.offset_by('1mo')).filter(pl.col('month') == month)
+        kept_historical_data = historical_data.with_columns(pl.col('month').dt.offset_by('2mo')).filter(pl.col('month') == month)
         # Build features only on the current month
 
         # Session features: a session lasts from the first heartbeat until the last

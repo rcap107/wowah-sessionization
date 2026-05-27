@@ -82,9 +82,10 @@ def add_session_features(df, hist_session_duration):
         left_on=["char", "month"],
         right_on=["char", "month"],
         how="left",
+        maintain_order="left",
     )
     return df
-
+# TODO: check joins for maintain_order
 
 def add_monthly_player_features(df, hist_session_duration):
     _ = hist_session_duration.group_by("char", "month").agg(
