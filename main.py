@@ -38,7 +38,8 @@ from adding_features import (
 # ValueError: No valid specification of the columns.
 # This is again because we are predicting on month N for month N+1
 MIN_DATE = datetime.strptime("2008-01-01", "%Y-%m-%d")
-MAX_DATE = datetime.strptime("2008-11-30", "%Y-%m-%d")
+MAX_DATE = datetime.strptime("2008-12-30", "%Y-%m-%d")
+# MAX_DATE = datetime.strptime("2008-11-30", "%Y-%m-%d")
 # Actual ranges for the full dataset
 # MIN_DATE = datetime.strptime("2005-12-31", "%Y-%m-%d")
 # MAX_DATE = datetime.strptime("2009-01-10", "%Y-%m-%d")
@@ -71,12 +72,11 @@ class Splitter:
                 .to_list()
             )
             if train_idx and test_idx:
-                print("split_point ", split_point)
                 yield train_idx, test_idx
 
     def get_n_splits(self, X, y):
-        time_range = pl.date_range(MIN_DATE, MAX_DATE, "1mo", eager=True)
-        return len(time_range)
+        return sum(1 for _ in self.split(X, y))
+
 
 def filter_df_by_month(df, month):
     return df.filter(pl.col("month") == month)
@@ -208,8 +208,8 @@ all_features
 
 encoded = all_features.skb.apply(skrub.TableVectorizer())
 # data_op = encoded.skb.apply(SimpleImputer()).skb.apply(LogisticRegression(), y=y)
-data_op = encoded.skb.apply(HGB(), y=y)
-# data_op = encoded.skb.apply(DummyClassifier(), y=y)
+# data_op = encoded.skb.apply(HGB(), y=y)
+data_op = encoded.skb.apply(DummyClassifier(), y=y)
 
 # %%
 # data_op.skb.full_report()
@@ -234,8 +234,12 @@ learner = data_op.skb.make_learner()
 # %%
 # data_op.skb.cross_validate()
 search = data_op.skb.make_grid_search(fitted=True, n_jobs=-1)
-search.results_
-import sys; sys.exit()
+# search.results_
+import sys
+
+sys.exit()
+
+
 # %%
 def make_data_op():
     user_month_has_played = skrub.var("query")
@@ -243,7 +247,17 @@ def make_data_op():
     y = user_month_has_played["has_played"].skb.mark_as_y()
     historical_data_file = skrub.var("historical_data_file")
     historical_data = historical_data_file.skb.apply_func(load)
-    all_features = X.skb.apply_func(add_features, historical_data)
+
+    # Hyperparameters
+    session_gap = skrub.choose_from([30, 60], name="session_gap")
+    use_location = skrub.choose_bool(name="location_features")
+
+    all_features = X.skb.apply_func(
+        add_features,
+        historical_data,
+        session_gap=session_gap,
+        use_location=use_location,
+    )
     encoded = all_features.skb.apply(skrub.TableVectorizer())
     # data_op = encoded.skb.apply(SimpleImputer()).skb.apply(LogisticRegression(), y=y)
     data_op = encoded.skb.apply(HGB(), y=y)
