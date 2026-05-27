@@ -37,8 +37,8 @@ from adding_features import (
 # I had to set the max date to november because otherwise I was getting
 # ValueError: No valid specification of the columns.
 # This is again because we are predicting on month N for month N+1
-MIN_DATE = datetime.strptime("2008-02-01", "%Y-%m-%d")
-MAX_DATE = datetime.strptime("2008-06-30", "%Y-%m-%d")
+MIN_DATE = datetime.strptime("2008-01-01", "%Y-%m-%d")
+MAX_DATE = datetime.strptime("2008-11-30", "%Y-%m-%d")
 # Actual ranges for the full dataset
 # MIN_DATE = datetime.strptime("2005-12-31", "%Y-%m-%d")
 # MAX_DATE = datetime.strptime("2009-01-10", "%Y-%m-%d")
@@ -74,6 +74,9 @@ class Splitter:
                 print("split_point ", split_point)
                 yield train_idx, test_idx
 
+    def get_n_splits(self, X, y):
+        time_range = pl.date_range(MIN_DATE, MAX_DATE, "1mo", eager=True)
+        return len(time_range)
 
 def filter_df_by_month(df, month):
     return df.filter(pl.col("month") == month)
@@ -82,7 +85,7 @@ def filter_df_by_month(df, month):
 # %%
 # This function is needed to make sure that we are only ever using historical data
 # up to the given month - 1 month. This is to avoid any leakage in the data.
-def add_features(X, historical_data, session_gap=30):
+def add_features(X, historical_data, session_gap=30, use_location=True):
     features_by_month = []
 
     # Create a session encoder with a 30 minute timeout
@@ -118,15 +121,25 @@ def add_features(X, historical_data, session_gap=30):
     # concatenating
     # kinda defeats the point of using data ops but I think it simplifies the code
 
+    tally_X = 0
+    tally_feat = 0
     # This is used to add the historical data up to the given month
-    for month in X['month'].unique():
+    for month in X["month"].unique().sort():
         this_month_X = filter_df_by_month(X, month)
 
-        # I'm building the history based only on the current (past) month
-        kept_historical_data = historical_data.with_columns(pl.col('month').dt.offset_by('2mo')).filter(pl.col('month') == month)
-        # Build features only on the current month
+        # Selecting only the entries in the historical data whose month + 2 is equal
+        # to the month I am trying to predict on.
+        # This means that if the "target month" is April, then the historical data
+        # should be filtered to keep only the rows where the current month + 2
+        # is equal to April, that is, the month is February. This is equivalent
+        # to saying "I want the rows for the current month - 2 months", but it's
+        # easier to implement
+        kept_historical_data = historical_data.with_columns(
+            pl.col("month").dt.offset_by("2mo")
+        ).filter(pl.col("month") == month)
 
-        # Session features: a session lasts from the first heartbeat until the last
+        # Session features: a session starts from a heartbeat, then it ends when
+        # no more heartbeats are detected for session_gap minutes
         historical_data_with_sessions = session_encoder.fit_transform(
             kept_historical_data
         )
@@ -148,22 +161,21 @@ def add_features(X, historical_data, session_gap=30):
             this_month_X, historical_data_with_sessions
         )
 
-        # df_with_features = add_location_features(
-        #     df_with_features,
-        #     historical_data_zone_sessions,
-        #     historical_data_with_sessions,
-        # )
+        if use_location:
+            df_with_features = add_location_features(
+                df_with_features,
+                historical_data_zone_sessions,
+            )
 
         # this step won't be needed once #2069 gets merged
         df_with_features = df_with_features.with_columns(
             cs.duration().dt.total_minutes()
         )
         features_by_month.append(df_with_features)
-        assert len(df_with_features) == len (this_month_X)
+        assert len(df_with_features) == len(this_month_X)
 
-    X_res = pl.concat(features_by_month)
+    X_res = pl.concat(features_by_month, how="diagonal")
     X_res = X_res.sort("index").drop("index")
-
 
     return X_res
     # return all_features
@@ -181,13 +193,16 @@ df = sample_by_user(df, fraction=0.1)
 user_month_has_played = skrub.var("query", df)
 X = user_month_has_played["char", "month"].skb.mark_as_X(cv=Splitter())
 y = user_month_has_played["has_played"].skb.mark_as_y()
-historical_data_file = skrub.var("historical_data_file",  "data/wowah_data_raw.parquet")
+historical_data_file = skrub.var("historical_data_file", "data/wowah_data_raw.parquet")
 historical_data = historical_data_file.skb.apply_func(load)
 historical_data
 
 # %%
 session_gap = skrub.choose_from([30, 60], name="session_gap")
-all_features = X.skb.apply_func(add_features, historical_data, session_gap=session_gap)
+use_location = skrub.choose_bool(name="location_features")
+all_features = X.skb.apply_func(
+    add_features, historical_data, session_gap=session_gap, use_location=use_location
+)
 all_features
 # %%
 
@@ -197,27 +212,30 @@ data_op = encoded.skb.apply(HGB(), y=y)
 # data_op = encoded.skb.apply(DummyClassifier(), y=y)
 
 # %%
-data_op.skb.full_report()
+# data_op.skb.full_report()
 
 # %%
 split = data_op.skb.train_test_split()
 
 # %%
-split['X_train']['month'].max()
+split["X_train"]["month"].max()
 
 # %%
 
-split['X_test']['month'].min()
+split["X_test"]["month"].min()
 
 # %%
 learner = data_op.skb.make_learner()
-learner.report(environment=split['train'], mode='fit')
+# learner.fit(environment=split["train"])
+# learner.report(environment=split["train"], mode="fit")
 
 # %%
-learner.report(environment=split['test'], mode='predict')
-
+# learner.report(environment=split["test"], mode="predict")
 # %%
-data_op.skb.cross_validate()
+# data_op.skb.cross_validate()
+search = data_op.skb.make_grid_search(fitted=True, n_jobs=-1)
+search.results_
+import sys; sys.exit()
 # %%
 def make_data_op():
     user_month_has_played = skrub.var("query")
@@ -231,6 +249,7 @@ def make_data_op():
     data_op = encoded.skb.apply(HGB(), y=y)
     # data_op = encoded.skb.apply(DummyClassifier(), y=y)
     return data_op
+
 
 # %%
 
@@ -259,6 +278,7 @@ def evaluate():
         {"query": df, "historical_data_file": historical_data_file}
     )
     return results
+
 
 # %%
 env = get_env()

@@ -85,7 +85,10 @@ def add_session_features(df, hist_session_duration):
         maintain_order="left",
     )
     return df
+
+
 # TODO: check joins for maintain_order
+
 
 def add_monthly_player_features(df, hist_session_duration):
     _ = hist_session_duration.group_by("char", "month").agg(
@@ -101,6 +104,7 @@ def add_monthly_player_features(df, hist_session_duration):
         left_on=["char", "month"],
         right_on=["char", "month"],
         how="left",
+        maintain_order="left"
     )
 
 
@@ -158,7 +162,7 @@ def add_player_rarity(df, df_rarity):
     is marked as "hub".
     """
     df_users_rarity = (
-        df.join(df_rarity, on="zone").select(
+        df.join(df_rarity, on="zone", how="left", maintain_order="left").select(
             pl.col("char"),
             pl.col("rarity")
             .max()
@@ -230,6 +234,9 @@ def get_location_gini(df, df_rarity, with_hub=False):
     players with low gini tend to stick to low-level/hub areas
     """
 
+    if df_rarity.is_empty():
+        df_with_gini = df.select(pl.col("char"), pl.col("char").alias("gini").cast(pl.Float64))
+        return df_with_gini
     if not with_hub:
         groups = (
             df.join(df_rarity, on="zone")
@@ -256,27 +263,34 @@ def add_gini_features(df, historical_data_zones, df_rarity):
     )
 
 
+def add_rarity_features(df, historical_data_zones, location_rarity):
+    df = df.join(
+        add_player_rarity(historical_data_zones, location_rarity),
+        on="char",
+        how="left",
+        maintain_order="left",
+    )
+    return df
+
+
 # %%
-def add_location_features(df, historical_data_zones, historical_data_sessions):
+def add_location_features(df, historical_data_zones):
     """
     historical_data_zones contains user-zone sessions, historical_data_sessions
     contains the full sessions
     """
     # zone rarity is a useful indicator for various features
     location_rarity = get_zone_rarity(historical_data_zones)
-    df_with_rarity = df.join(
-        add_player_rarity(historical_data_zones, location_rarity), on="char", how="left"
-    )
-    df = add_gini_features(df_with_rarity, historical_data_zones, location_rarity)
+    df = add_rarity_features(df, historical_data_zones, location_rarity)
+    df = add_gini_features(df, historical_data_zones, location_rarity)
     return df
 
 
 # %%
 def add_general_features(df, historical_data):
-    hist_session_duration = get_session_duration(historical_data)
-    df = add_session_features(df, hist_session_duration)
-    df = add_monthly_player_features(df, hist_session_duration)
-    df = add_class_features(df, hist_session_duration)
+    df = add_session_features(df, historical_data)
+    df = add_monthly_player_features(df, historical_data)
+    df = add_class_features(df, historical_data)
     return df
 
 
