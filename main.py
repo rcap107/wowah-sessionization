@@ -82,14 +82,14 @@ def filter_df_by_month(df, month):
 # %%
 # This function is needed to make sure that we are only ever using historical data
 # up to the given month - 1 month. This is to avoid any leakage in the data.
-def add_features(X, historical_data):
+def add_features(X, historical_data, session_gap=30):
     features_by_month = []
 
     # Create a session encoder with a 30 minute timeout
     # This encoder is used as a stateless transformer so it is refitted for every
     # month
     session_encoder = SessionEncoder(
-        group_by="char", timestamp_col="timestamp", session_gap=30
+        group_by="char", timestamp_col="timestamp", session_gap=session_gap
     )
     historical_data = historical_data.with_columns(
         month=pl.col("timestamp").dt.truncate("1mo")
@@ -100,7 +100,7 @@ def add_features(X, historical_data):
     # Even if users leave the zone, this lets me find how much time a user spends in
     # a given zone
     session_encoder_zone = SessionEncoder(
-        group_by=["char", "zone"], timestamp_col="timestamp", session_gap=30
+        group_by=["char", "zone"], timestamp_col="timestamp", session_gap=session_gap
     )
     # Adding fixed features: these features are fixed by character so they don't
     # change over time.
@@ -186,15 +186,8 @@ historical_data = historical_data_file.skb.apply_func(load)
 historical_data
 
 # %%
-historical_data_val = historical_data.skb.preview()
-X_val = X.skb.preview()
-
-# %%
-feat = add_features(X_val, historical_data_val)
-feat
-
-# %%
-all_features = X.skb.apply_func(add_features, historical_data)
+session_gap = skrub.choose_from([30, 60], name="session_gap")
+all_features = X.skb.apply_func(add_features, historical_data, session_gap=session_gap)
 all_features
 # %%
 
