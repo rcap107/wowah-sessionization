@@ -15,6 +15,8 @@ while carefully avoiding data leakage. It uses a temporal cross-validation strat
 
 ## Key Components
 
+### `add_churn.py` - Preparation of the churn feature
+
 ### `main.py` - Core Pipeline
 
 - **Splitter class**: Custom temporal cross-validator that splits data by month to prevent leakage
