@@ -32,14 +32,8 @@ from adding_features import (
     add_location_features,
 )
 
-# This needs to start in February to have one month of historical data and one month
-# of break before I can build features.
-# I had to set the max date to november because otherwise I was getting
-# ValueError: No valid specification of the columns.
-# This is again because we are predicting on month N for month N+1
 MIN_DATE = datetime.strptime("2008-01-01", "%Y-%m-%d")
 MAX_DATE = datetime.strptime("2008-12-30", "%Y-%m-%d")
-# MAX_DATE = datetime.strptime("2008-11-30", "%Y-%m-%d")
 # Actual ranges for the full dataset
 # MIN_DATE = datetime.strptime("2005-12-31", "%Y-%m-%d")
 # MAX_DATE = datetime.strptime("2009-01-10", "%Y-%m-%d")
@@ -72,6 +66,7 @@ class Splitter:
                 .to_list()
             )
             if train_idx and test_idx:
+                print(f"Working on month {split_point}")
                 yield train_idx, test_idx
 
     def get_n_splits(self, X, y):
@@ -121,9 +116,8 @@ def add_features(X, historical_data, session_gap=30, use_location=True):
     # concatenating
     # kinda defeats the point of using data ops but I think it simplifies the code
 
-    tally_X = 0
-    tally_feat = 0
     # This is used to add the historical data up to the given month
+    # Sorting months is not needed, but forces a consistent order (better for debugging)
     for month in X["month"].unique().sort():
         this_month_X = filter_df_by_month(X, month)
 
@@ -157,11 +151,13 @@ def add_features(X, historical_data, session_gap=30, use_location=True):
             historical_data_zone_sessions
         )
 
+        # General features: add session based and playerbase features
         df_with_features = add_general_features(
             this_month_X, historical_data_with_sessions
         )
 
         if use_location:
+            # Location features can be useful but take longer to generate
             df_with_features = add_location_features(
                 df_with_features,
                 historical_data_zone_sessions,
@@ -174,71 +170,14 @@ def add_features(X, historical_data, session_gap=30, use_location=True):
         features_by_month.append(df_with_features)
         assert len(df_with_features) == len(this_month_X)
 
-    X_res = pl.concat(features_by_month, how="diagonal")
+    X_res = pl.concat(features_by_month, how="vertical")
     X_res = X_res.sort("index").drop("index")
 
     return X_res
-    # return all_features
 
 
 def load(file):
     return pl.read_parquet(file)
-
-
-# %%
-df = pl.read_parquet("data/wowah_churn_data.parquet")
-df = sample_by_user(df, fraction=0.1)
-
-
-user_month_has_played = skrub.var("query", df)
-X = user_month_has_played["char", "month"].skb.mark_as_X(cv=Splitter())
-y = user_month_has_played["has_played"].skb.mark_as_y()
-historical_data_file = skrub.var("historical_data_file", "data/wowah_data_raw.parquet")
-historical_data = historical_data_file.skb.apply_func(load)
-historical_data
-
-# %%
-session_gap = skrub.choose_from([30, 60], name="session_gap")
-use_location = skrub.choose_bool(name="location_features")
-all_features = X.skb.apply_func(
-    add_features, historical_data, session_gap=session_gap, use_location=use_location
-)
-all_features
-# %%
-
-encoded = all_features.skb.apply(skrub.TableVectorizer())
-# data_op = encoded.skb.apply(SimpleImputer()).skb.apply(LogisticRegression(), y=y)
-# data_op = encoded.skb.apply(HGB(), y=y)
-data_op = encoded.skb.apply(DummyClassifier(), y=y)
-
-# %%
-# data_op.skb.full_report()
-
-# %%
-split = data_op.skb.train_test_split()
-
-# %%
-split["X_train"]["month"].max()
-
-# %%
-
-split["X_test"]["month"].min()
-
-# %%
-learner = data_op.skb.make_learner()
-# learner.fit(environment=split["train"])
-# learner.report(environment=split["train"], mode="fit")
-
-# %%
-# learner.report(environment=split["test"], mode="predict")
-# %%
-# data_op.skb.cross_validate()
-search = data_op.skb.make_grid_search(fitted=True, n_jobs=-1)
-# search.results_
-import sys
-
-sys.exit()
-
 
 # %%
 def make_data_op():
@@ -247,6 +186,14 @@ def make_data_op():
     y = user_month_has_played["has_played"].skb.mark_as_y()
     historical_data_file = skrub.var("historical_data_file")
     historical_data = historical_data_file.skb.apply_func(load)
+    # In the original data, "guild == -1" means "no guild", so I'm replacing -1
+    # with nulls.
+    historical_data = historical_data.with_columns(
+        pl.when(pl.col("guild") == -1)
+        .then(None)
+        .otherwise(pl.col("guild"))
+        .alias("guild")
+    )
 
     # Hyperparameters
     session_gap = skrub.choose_from([30, 60], name="session_gap")
@@ -295,20 +242,5 @@ def evaluate():
 
 
 # %%
-env = get_env()
-make_data_op().skb.full_report(env)
-
-# %%
-
-df = pl.read_parquet("data/wowah_churn_data.parquet")
-df = sample_by_user(df, fraction=0.1)
-data_op = make_data_op()
-# %%
 results = cross_validate()
 print(results)
-# %%
-# evaluation_results = evaluate()
-# %%
-# print(results)
-
-# %%
