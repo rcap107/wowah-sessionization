@@ -8,7 +8,7 @@ from skrub import TableReport
 path = "data/wowah_data_raw.parquet"
 
 
- %%
+# %%
 def with_polars(path):
     df = pl.read_parquet(path)
 
