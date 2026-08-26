@@ -1,13 +1,11 @@
 import re
-from tqdm import tqdm
 from pathlib import Path
 import os
-import glob
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 NUM_WORKERS = os.cpu_count() or 4
 
-output_path = "data/wowah_parsed_mp.csv"
+output_path = "../data/wowah_parsed_mp.csv"
 root_dir = "/Users/rcap/work/sessionization/WoWAH"
 
 # Define regex pattern parts
@@ -70,17 +68,9 @@ def worker_wrapper(file_path):
     return process_single_file(file_path)
 
 
-def iterate_files(root_dir):
-    total_files = sum(1 for _ in Path(root_dir).rglob("*.txt"))
-    for path in tqdm(Path(root_dir).rglob("*.txt"), total=total_files):
-        day = path.parent.name
-        tqdm.write(f"Processing file: {day}/{path.stem}")
-        read_append(path)
-
-
 def main():
     create_output_file(output_path)
-    unmatched_files_log = "data/no_matches_files.log"
+    unmatched_files_log = "../data/no_matches_files.log"
 
     file_paths = [str(fp) for fp in Path(root_dir).rglob("*.txt")]
     # Process in parallel and stream to output

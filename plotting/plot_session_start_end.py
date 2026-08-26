@@ -29,7 +29,7 @@ query_data = df_user_month.filter(
 # %%
 
 session_encoder = SessionEncoder(
-    group_by="char", timestamp_col="timestamp", session_gap=30
+    split_by="char", timestamp_col="timestamp", session_gap=30*60
 )
 historical_data_with_sessions = session_encoder.fit_transform(historical_data)
 
