@@ -131,10 +131,9 @@ def remove_unrealistic_entries(churn_data, data):
     return churn_data
 
 
-def build_churn_dataset():
+def build_churn_dataset(historical_data):
     # Load the dataset
-    df = pl.scan_parquet("data/wowah_data_raw.parquet")
-    df = df.with_columns(
+    df = historical_data.with_columns(
         first_month=pl.col("timestamp").dt.truncate("1mo").min().over("char")
     )
     #
@@ -143,12 +142,11 @@ def build_churn_dataset():
     user_month = make_user_month(df)
     churn_data = add_churn(user_month, data)
     churn_data = remove_unrealistic_entries(churn_data, data)
-    return churn_data
-    # return churn_data.collect()
+    return churn_data.collect()
 
 
 if __name__ == "__main__":
-    churn_data = build_churn_dataset()
+    churn_data = build_churn_dataset(pl.scan_parquet("data/wowah_data_raw.parquet"))
     # churn_data.write_parquet("data/wowah_churn_data.parquet")
 
 # %%

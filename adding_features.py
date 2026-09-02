@@ -162,7 +162,7 @@ def add_player_rarity(df, df_rarity):
     is marked as "hub".
     """
     df_users_rarity = (
-        df.join(df_rarity, on="zone", how="left", maintain_order="left").select(
+        df.lazy().join(df_rarity.lazy(), on="zone", how="left", maintain_order="left").select(
             pl.col("char"),
             pl.col("rarity")
             .max()
@@ -255,7 +255,7 @@ def get_location_gini(df, df_rarity, with_hub=False):
 def add_gini_features(df, historical_data_zones, df_rarity):
     df_with_gini = get_location_gini(historical_data_zones, df_rarity, with_hub=False)
     return df.join(
-        df_with_gini,
+        df_with_gini.lazy(),
         on=[
             "char",
         ],
@@ -264,26 +264,26 @@ def add_gini_features(df, historical_data_zones, df_rarity):
 
 
 def add_rarity_features(df, historical_data_zones, location_rarity):
-    df = df.join(
+    return df.join(
         add_player_rarity(historical_data_zones, location_rarity),
         on="char",
         how="left",
         maintain_order="left",
     )
-    return df
 
 
 # %%
-def add_location_features(df, historical_data_zones):
+def add_location_features(df, historical_data_zones, add_gini=False):
     """
     historical_data_zones contains user-zone sessions, historical_data_sessions
     contains the full sessions
     """
     # zone rarity is a useful indicator for various features
     location_rarity = get_zone_rarity(historical_data_zones)
-    df = add_rarity_features(df, historical_data_zones, location_rarity)
-    df = add_gini_features(df, historical_data_zones, location_rarity)
-    return df
+    df = add_rarity_features(df.lazy(), historical_data_zones, location_rarity)
+    if add_gini:
+        df = add_gini_features(df.lazy(), historical_data_zones, location_rarity)
+    return df.collect()
 
 
 # %%
@@ -293,35 +293,3 @@ def add_general_features(df, historical_data):
     df = add_class_features(df, historical_data)
     return df
 
-
-# %%
-if __name__ == "main":
-    df = pl.read_parquet("data/wowah_data_raw.parquet")
-    df_user_month = pl.read_parquet("data/wowah_churn_data.parquet").select(
-        "char", "month", "first_month"
-    )
-    df_user_month = sample_by_user(df_user_month, fraction=0.1)
-    df = df.with_columns(guild=pl.col("guild").replace(-1, None))
-    # Here I define the target month, i.e., the month for which I want to predict churn.
-    # The cutoff month is the month before the target month: the idea is that during
-    # the "cutoff month" we can take some action to prevent churn in the "target month".
-    # I then filter the historical data to only include data before the cutoff month.
-    target_month = datetime.datetime(2008, 6, 1)
-    cutoff_month = pl.Series([target_month]).dt.offset_by("-1mo").first()
-    historical_data = df.filter(pl.col("timestamp") < target_month)
-    historical_data = historical_data.with_columns(
-        month=pl.col("timestamp").dt.truncate("1mo")
-    )
-    query_data = df_user_month.filter(
-        (pl.col("month") == target_month) & (pl.col("first_month") < target_month)
-    )
-    query_data = query_data.with_columns(
-        previous_month=pl.col("month").dt.offset_by("-1mo")
-    )
-
-    session_encoder = SessionEncoder(
-        group_by="char", timestamp_col="timestamp", session_gap=30
-    )
-    historical_data_with_sessions = session_encoder.fit_transform(historical_data)
-    add_general_features(query_data, historical_data_with_sessions)
-    get_session_duration(historical_data_with_sessions)

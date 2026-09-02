@@ -23,6 +23,7 @@ from sklearn.ensemble import HistGradientBoostingClassifier as HGB
 from skrub import ApplyToCols, DatetimeEncoder, SessionEncoder, TableVectorizer
 from sklearn.impute import SimpleImputer
 
+from add_churn import build_churn_dataset
 from src.utils import sample_by_user
 
 from adding_features import (
@@ -79,7 +80,7 @@ def filter_df_by_month(df, month):
 # %%
 # This function is needed to make sure that we are only ever using historical data
 # up to the given month - 1 month. This is to avoid any leakage in the data.
-def add_features(X, historical_data, session_gap=30, use_location=True):
+def add_features(X, historical_data, session_gap=30, use_location=True, add_gini=False):
     features_by_month = []
 
     # Create a session encoder with a 30 minute timeout
@@ -140,32 +141,28 @@ def add_features(X, historical_data, session_gap=30, use_location=True):
             historical_data_with_sessions
         )
 
-        # Zone-session features: a session lasts from the first time a character
-        # enters a zone to the moment it leaves it
-        # This is useful to get zone-specific features
-        historical_data_zone_sessions = session_encoder_zone.fit_transform(
-            kept_historical_data
-        )
-        historical_data_zone_sessions = get_session_duration(
-            historical_data_zone_sessions
-        )
-
         # General features: add session based and playerbase features
         df_with_features = add_general_features(
             this_month_X, historical_data_with_sessions
         )
 
+        # Location features can be useful but take much longer to generate
         if use_location:
-            # Location features can be useful but take longer to generate
+            # Zone-session features: a session lasts from the first time a character
+            # enters a zone to the moment it leaves it
+            # This is useful to get zone-specific features
+            historical_data_zone_sessions = session_encoder_zone.fit_transform(
+                kept_historical_data
+            )
+            historical_data_zone_sessions = get_session_duration(
+                historical_data_zone_sessions
+            )
             df_with_features = add_location_features(
                 df_with_features,
                 historical_data_zone_sessions,
+                add_gini=add_gini,
             )
 
-        # this step won't be needed once #2069 gets merged
-        df_with_features = df_with_features.with_columns(
-            cs.duration().dt.total_minutes()
-        )
         features_by_month.append(df_with_features)
         assert len(df_with_features) == len(this_month_X)
 
@@ -175,15 +172,19 @@ def add_features(X, historical_data, session_gap=30, use_location=True):
     return X_res
 
 
-def load(file):
-    return pl.read_parquet(file)
+def load(file, fraction=0.1):
+    if fraction == 1:
+        print("Returning all users")
+        return pl.scan_parquet(file)
+
+    print(f"Sampling {fraction * 100}% of the users")
+    df = pl.scan_parquet(file)
+    df = sample_by_user(df.collect(), fraction=fraction)
+    return df.lazy()
 
 
 # %%
 def make_data_op():
-    user_month_has_played = skrub.var("query")
-    X = user_month_has_played["char", "month"].skb.mark_as_X(cv=Splitter())
-    y = user_month_has_played["has_played"].skb.mark_as_y()
     historical_data_file = skrub.var("historical_data_file")
     historical_data = historical_data_file.skb.apply_func(load)
     # In the original data, "guild == -1" means "no guild", so I'm replacing -1
@@ -195,19 +196,27 @@ def make_data_op():
         .alias("guild")
     )
 
+    user_month_has_played = historical_data.skb.apply_func(build_churn_dataset)
+    X = user_month_has_played["char", "month"].skb.mark_as_X(cv=Splitter())
+    y = user_month_has_played["has_played"].skb.mark_as_y()
+
     # Hyperparameters
     session_gap = skrub.choose_from([60], name="session_gap")
     use_location = skrub.choose_bool(name="location_features")
+    add_gini = skrub.choose_bool(name="add_gini")
 
     all_features = X.skb.apply_func(
         add_features,
-        historical_data,
+        historical_data.collect(),
         session_gap=session_gap,
         use_location=use_location,
+        add_gini=add_gini
     )
     encoded = all_features.skb.apply(skrub.TableVectorizer())
     # data_op = encoded.skb.apply(SimpleImputer()).skb.apply(LogisticRegression(), y=y)
-    data_op = encoded.skb.apply(HGB(learning_rate=skrub.choose_float(0.01, 1.0, log=True)), y=y)
+    data_op = encoded.skb.apply(
+        HGB(learning_rate=skrub.choose_float(0.01, 1.0, log=True)), y=y
+    )
     # data_op = encoded.skb.apply(DummyClassifier(), y=y)
     return data_op
 
@@ -231,6 +240,7 @@ def cross_validate():
     )
     return results
 
+
 def random_search():
     df = pl.read_parquet("data/wowah_churn_data.parquet")
     df = sample_by_user(df, fraction=0.05)
@@ -239,22 +249,20 @@ def random_search():
         backend="optuna", n_jobs=-1, n_iter=5
     )
     env = {"query": df, "historical_data_file": historical_data_file}
-    
+
     return search, env
-    
+
 
 def evaluate():
-    df = pl.read_parquet("data/wowah_churn_data.parquet")
     historical_data_file = "data/wowah_data_raw.parquet"
-    results = make_data_op().skb.eval(
-        {"query": df, "historical_data_file": historical_data_file}
-    )
+    data_op = make_data_op()
+    results = data_op.skb.eval({"historical_data_file": historical_data_file})
     return results
 
-search, env = random_search()
 
 # %%
-results = cross_validate()
+historical_data_file = "data/wowah_data_raw.parquet"
+data_op = make_data_op()
+# %%
+results = evaluate()
 print(results)
-
-# %%
