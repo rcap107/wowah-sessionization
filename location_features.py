@@ -22,7 +22,7 @@ df = df.filter(pl.col("timestamp").dt.month() == 4)
 # %%
 # First I generate the regular session IDs for the user based only on the char ID
 session_encoder = SessionEncoder(
-    group_by="char", timestamp_col="timestamp", session_gap=30
+    split_by="char", timestamp_col="timestamp", session_gap=30
 )
 df_with_sessions = session_encoder.fit_transform(df)
 
@@ -116,7 +116,7 @@ def add_player_rarity(df_with_sessions, df_rarity):
     based on the overall rarity computed across the playerbase.
 
     High max rarity means that a user goes to rare (usually high-level) locations,
-    high mean rarirty means they tend to spend more time out of hubs.
+    high mean rarity means they tend to spend more time out of hubs.
 
     The "in_hub" column tracks the fraction of time a player spends in a zone that
     is marked as "hub".

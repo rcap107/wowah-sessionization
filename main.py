@@ -23,9 +23,8 @@ from sklearn.ensemble import HistGradientBoostingClassifier as HGB
 from skrub import ApplyToCols, DatetimeEncoder, SessionEncoder, TableVectorizer
 from sklearn.impute import SimpleImputer
 
-from src.utils import (
-    sample_by_user,
-)
+from src.utils import sample_by_user
+
 from adding_features import (
     add_general_features,
     get_session_duration,
@@ -87,7 +86,7 @@ def add_features(X, historical_data, session_gap=30, use_location=True):
     # This encoder is used as a stateless transformer so it is refitted for every
     # month
     session_encoder = SessionEncoder(
-        group_by="char", timestamp_col="timestamp", session_gap=session_gap
+        split_by="char", timestamp_col="timestamp", session_gap=session_gap
     )
     historical_data = historical_data.with_columns(
         month=pl.col("timestamp").dt.truncate("1mo")
@@ -98,7 +97,7 @@ def add_features(X, historical_data, session_gap=30, use_location=True):
     # Even if users leave the zone, this lets me find how much time a user spends in
     # a given zone
     session_encoder_zone = SessionEncoder(
-        group_by=["char", "zone"], timestamp_col="timestamp", session_gap=session_gap
+        split_by=["char", "zone"], timestamp_col="timestamp", session_gap=session_gap
     )
     # Adding fixed features: these features are fixed by character so they don't
     # change over time.
@@ -179,6 +178,7 @@ def add_features(X, historical_data, session_gap=30, use_location=True):
 def load(file):
     return pl.read_parquet(file)
 
+
 # %%
 def make_data_op():
     user_month_has_played = skrub.var("query")
@@ -196,7 +196,7 @@ def make_data_op():
     )
 
     # Hyperparameters
-    session_gap = skrub.choose_from([30, 60], name="session_gap")
+    session_gap = skrub.choose_from([60], name="session_gap")
     use_location = skrub.choose_bool(name="location_features")
 
     all_features = X.skb.apply_func(
@@ -207,7 +207,7 @@ def make_data_op():
     )
     encoded = all_features.skb.apply(skrub.TableVectorizer())
     # data_op = encoded.skb.apply(SimpleImputer()).skb.apply(LogisticRegression(), y=y)
-    data_op = encoded.skb.apply(HGB(), y=y)
+    data_op = encoded.skb.apply(HGB(learning_rate=skrub.choose_float(0.01, 1.0, log=True)), y=y)
     # data_op = encoded.skb.apply(DummyClassifier(), y=y)
     return data_op
 
@@ -231,6 +231,17 @@ def cross_validate():
     )
     return results
 
+def random_search():
+    df = pl.read_parquet("data/wowah_churn_data.parquet")
+    df = sample_by_user(df, fraction=0.05)
+    historical_data_file = "data/wowah_data_raw.parquet"
+    search = make_data_op().skb.make_randomized_search(
+        backend="optuna", n_jobs=-1, n_iter=5
+    )
+    env = {"query": df, "historical_data_file": historical_data_file}
+    
+    return search, env
+    
 
 def evaluate():
     df = pl.read_parquet("data/wowah_churn_data.parquet")
@@ -240,7 +251,10 @@ def evaluate():
     )
     return results
 
+search, env = random_search()
 
 # %%
 results = cross_validate()
 print(results)
+
+# %%
