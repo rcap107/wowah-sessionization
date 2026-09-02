@@ -1,0 +1,76 @@
+---
+title: "Predicting player churn in an MMORPG (WoW)"
+format:
+    html:
+        code-fold: false
+---
+
+In this blog post we will see how we can predict player churn in World of Warcraft 
+(WoW), a subscription-based MMORPG that was released in 2004. More precisely, we are 
+interested in predicting a player's behavior in a given month, and decide whether 
+there is a risk that they will stop playing the next month. 
+To do so, we want to train a machine learning model that, given features based 
+on each player and on the overall playerbase, will be able to predict whether 
+player X will stop playing in the month of May 2009 (for example). 
+
+Through the post we will build a full machine learning pipeline: we use  
+polars for dataframe operations; [skrub](https://skrub-data.org/stable/) is used
+for data exploration, feature engineering and constructing the overall execution plan; 
+scikit-learn is imported for the actual ML model; hyperparameter optimization is 
+done using Optuna through skrub's Data Ops. 
+
+
+### The dataset
+We rely on the [World of Warcraft Avatar History](https://qualinet.github.io/databases/world_of_warcraft_avatar_history_dataset/). 
+The dataset is built by scanning the game's servers roughly every 10 minutes, and
+logging information about each user in the Horde faction that is found online at 
+the timestamp's time. As we have a sequence of timestamps, this lets us track the
+behavior of players over time. 
+
+Avatar information includes:
+
+- The avatar's ID (a unique integer ID for anonymization)
+- The ID of the avatar's guild (possibly missing)
+- The avatar level at that moment in time
+- The avatar's race (Blood Elf, Undead, Tauren etc.)
+- The avatar's class (Hunter, Mage, Warlock etc.)
+- The avatar's location in the game's world
+
+**Practical observations** 
+The dataset requires some preprocessing before it can be converted to a dataframe, 
+as it is stored in plaintext in a non-standard format. We handle the conversion
+procedure in a separate script, so that the rest of the process can use dataframe
+libraries. We also upload the processed dataset on 
+[Kaggle: World of Warcraft Avatar History 2006-2009](https://www.kaggle.com/datasets/ryye107/world-of-warcraft-avatar-history).
+
+## Modeling player churn
+Modeling user churn is a common application of machine learning models, though 
+the definition of churn is typically business' specific. In general, by "user churn"
+one refers to "a user that does not come back to the service". In the context of 
+WoW, user churn would refer to those users that do not come back to the game and
+suspend their monthly subscription. 
+As we do not have access to the actual subscription data, we assume that each 
+player suspends their subscription as soon as they stop playing for a month.
+
+For this post, we aggregate player behaviors at a monthly basis, and add a `has_played`
+flag that tells us if a player has played at during each month. 
+
+
+::: {.callout-important}
+
+**Our objective**
+
+Given a month (e.g., June), we want to use all the data up to the last day of the 
+previous month (all months until May included) to predict whether a user will churn
+in July (i.e., their `has_played` flag will be `False` in July).
+
+:::
+
+The idea is that, by knowing that user X will churn in July, we should be able to 
+use the month of June to apply some incentive to the user so they won't churn. 
+
+One caveat with this modeling strategy is that we are working with 
+historical data, so we cannot actually apply said incentive and observe whether 
+it has an impact like in a typical [A/B test](https://en.wikipedia.org/wiki/A/B_testing). 
+
+### Building the churn dataset

@@ -143,9 +143,12 @@ def build_churn_dataset():
     user_month = make_user_month(df)
     churn_data = add_churn(user_month, data)
     churn_data = remove_unrealistic_entries(churn_data, data)
-    return churn_data.collect()
+    return churn_data
+    # return churn_data.collect()
 
 
 if __name__ == "__main__":
     churn_data = build_churn_dataset()
-    churn_data.write_parquet("data/wowah_churn_data.parquet")
+    # churn_data.write_parquet("data/wowah_churn_data.parquet")
+
+# %%
