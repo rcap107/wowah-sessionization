@@ -29,6 +29,26 @@ This is the "churn" dataset, which we can then use to train a model.
 
 # %%
 import polars as pl
+# %%
+
+def make_data(df):
+    """
+    Prepare a dataframe that contains the months in which each player has
+    actually played. The column "has_played" is then set to True for those months.
+    Any month in which the player did not play is missing from this dataset,
+    because the dataset is built starting from player activity, so any "empty
+    month" simply doesn't exist in this dataset.
+    """
+
+    data = (
+        df.with_columns(
+            pl.col("timestamp").dt.truncate("1mo").alias("month"),
+            first_month=pl.col("timestamp").dt.truncate("1mo").min().over("char"),
+        )
+        .unique(subset=["char", "month"])
+        .with_columns(pl.lit(True).alias("has_played"))
+    )
+    return data
 
 
 def make_user_month(df):
@@ -61,22 +81,6 @@ def make_user_month(df):
     return char_month
 
 
-def make_data(df):
-    """
-    Prepare a dataframe that contains the months in which each player has
-    actually played. The column "has_played" is then set to True for those months.
-    Any month in which the player did not play is missing from this dataset,
-    because the dataset is built starting from player activity, so any "empty
-    month" simply doesn't exist in this dataset.
-    """
-
-    data = (
-        df.with_columns(pl.col("timestamp").dt.truncate("1mo").alias("month"))
-        .unique(subset=["char", "month"])
-        .with_columns(pl.lit(True).alias("has_played"))
-    )
-    return data
-
 
 def add_churn(user_month, data):
     """
@@ -89,16 +93,17 @@ def add_churn(user_month, data):
 
     df_with_user_month = (
         user_month.join(
-            data.select(
-                "char",
-                "month",
-                "has_played",
-                "first_month",
-            ),
+            data,
             on=["char", "month"],
             how="left",
         )
         .with_columns(pl.col("has_played").fill_null(False))
+        # Fill missing values in the first_month column with each character's
+        # first month
+        .with_columns(first_month=pl.col("first_month").min().over("char"))
+        # Remove (char, month) rows where the month precedes the character's
+        # first month
+        .filter(pl.col("first_month") <= pl.col("month"))
         .select(
             "char",
             "month",
@@ -107,6 +112,7 @@ def add_churn(user_month, data):
         )
     )
     return df_with_user_month
+
 
 
 def remove_unrealistic_entries(churn_data, data):
@@ -133,13 +139,9 @@ def remove_unrealistic_entries(churn_data, data):
 
 def build_churn_dataset(historical_data):
     # Load the dataset
-    df = historical_data.with_columns(
-        first_month=pl.col("timestamp").dt.truncate("1mo").min().over("char")
-    )
-    #
-    data = make_data(df)
+    data = make_data(historical_data)
     # Add the combinations of user months
-    user_month = make_user_month(df)
+    user_month = make_user_month(historical_data)
     churn_data = add_churn(user_month, data)
     churn_data = remove_unrealistic_entries(churn_data, data)
     return churn_data.collect()
@@ -148,5 +150,3 @@ def build_churn_dataset(historical_data):
 if __name__ == "__main__":
     churn_data = build_churn_dataset(pl.scan_parquet("data/wowah_data_raw.parquet"))
     # churn_data.write_parquet("data/wowah_churn_data.parquet")
-
-# %%

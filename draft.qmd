@@ -19,6 +19,10 @@ for data exploration, feature engineering and constructing the overall execution
 scikit-learn is imported for the actual ML model; hyperparameter optimization is 
 done using Optuna through skrub's Data Ops. 
 
+To keep the focus of this post on the process rather than the code, most of the 
+lower-level functions will be hidden in collapsible blocks. This includes much 
+of the pre-processing and feature engineering, although important sections will
+be highlighted as needed. 
 
 ### The dataset
 We rely on the [World of Warcraft Avatar History](https://qualinet.github.io/databases/world_of_warcraft_avatar_history_dataset/). 
@@ -42,6 +46,33 @@ as it is stored in plaintext in a non-standard format. We handle the conversion
 procedure in a separate script, so that the rest of the process can use dataframe
 libraries. We also upload the processed dataset on 
 [Kaggle: World of Warcraft Avatar History 2006-2009](https://www.kaggle.com/datasets/ryye107/world-of-warcraft-avatar-history).
+
+### A quick exploration of the dataset
+We begin by loading the historical dataset with all the timestamps. We use 
+`.scan_parquet()` because it returns a `LazyFrame`, which we want to use as much
+as possible through the code for query optimization. 
+
+```{python}
+from skrub import TableReport
+import polars as pl
+
+df = pl.scan_parquet("data/wowah_data_raw.parquet")
+# we collect the dataframe because the TableReport does not accept LazyFrames
+TableReport(df.collect())
+```
+
+Skrub's `TableReport` gives a quick view of many statistics we may be interested
+in when we explore a dataset. 
+We can get information on the shape of the dataframe (almost 11M rows), the 
+data types we are working with as well as the distribution of categorical and 
+numerical values. The level cap of 70 is immediately evident as the median of the 
+"level" column.
+
+By itself, this dataset includes a wealth of information about player habits and 
+behaviors, but exploring such information goes beyond the scope of this post. As
+such, we will only focus on what is most relevant to the task of predicting player
+churn. 
+
 
 ## Modeling player churn
 Modeling user churn is a common application of machine learning models, though 
@@ -74,3 +105,445 @@ historical data, so we cannot actually apply said incentive and observe whether
 it has an impact like in a typical [A/B test](https://en.wikipedia.org/wiki/A/B_testing). 
 
 ### Building the churn dataset
+We begin by adding two columns to the historical dataset: in the first we store 
+each timestamp, truncated to have a monthly resolution; in the second we track the 
+first month for each character. Additionally, we add a constant `has_played` column
+that acts as our "player was seen" flag. 
+
+Since we are interested in monthly snapshots, the dataset is then reduced to select
+only the unique (character, month) pairs. 
+
+::: {.callout collapse="true"}
+
+```{python}
+def make_data(df):
+    """
+    Add a timestamp column with monthly resolution, the first month for each
+    character, and a constant column that acts as flag. 
+    """
+
+    data = (
+        df.with_columns(
+            pl.col("timestamp").dt.truncate("1mo").alias("month"),
+            first_month=pl.col("timestamp").dt.truncate("1mo").min().over("char"),
+        )
+        .unique(subset=["char", "month"])
+        .with_columns(pl.lit(True).alias("has_played"))
+    )
+    return data
+data = make_data(df)
+```
+
+:::
+
+Since we want to predict the behavior a player will have over a single month, our
+target variable will be grouped by "user-month" (e.g., `153_2026-12`). However, 
+not all players will play at least once every month, so by relying exclusively 
+on the historical data we would be missing samples; to get around this problem 
+we generate a `char_month` dataset that contains all unique combinations of users
+and months by executing the cross-product between the unique users and the range
+of months. 
+
+
+::: {.callout collapse="true"}
+
+### Cross product
+
+The cross product between two sets (in this case, months and unique users) 
+builds a new set where each element in the first set is paired with all elements
+in the second set. 
+
+```{python}
+import polars as pl
+df1 = pl.DataFrame({"col": [1,2,3]})
+df2 = pl.DataFrame({"col": ["a","b"]})
+df1.join(df2, how="cross")
+```
+
+:::
+
+::: {.callout collapse="true"}
+
+```{python}
+def make_user_month(df):
+    """
+    Create a DataFrame with all unique combinations of users and months.
+    
+    The month range is extracted from the dataset.  
+    """
+
+    months = pl.datetime_range(
+        start=df.select(pl.col("timestamp").dt.truncate("1mo").min()).collect().item(),
+        end=df.select(pl.col("timestamp").dt.truncate("1mo").max()).collect().item(),
+        interval="1mo",
+        closed="both",
+        eager=True,
+    )
+
+    char_month = (
+        df
+        .select("char")
+        .unique()
+        .join(months.to_frame(name="month").lazy(), how="cross")
+    )
+    return char_month
+
+user_month = make_user_month(df)
+user_month.collect()
+```
+
+:::
+
+
+Now that we have all the combinations (character, month), we can join back the 
+prepared data to mark all the months in which each character was found online, 
+and marking all others with `has_played=False`. 
+
+Additionally, the resulting rows are filtered to remove all pairs (char, month) 
+whose `month` precedes the character's first month. We should not have a row 
+about a character's playtime in January if they started playing in August! 
+
+
+::: {.callout collapse="true"}
+
+```{python}
+def add_churn(user_month, data):
+    """
+    Merge the user-month DataFrame with the actual play data.
+    The resulting DataFrame will have a "has_played" column indicating
+    whether the user played in that month. Any missing values in "has_played" are
+    filled with False: missing values mean that the player did not play in that
+    particular month.
+    """
+
+    df_with_user_month = (
+        user_month.join(
+            data,
+            on=["char", "month"],
+            how="left",
+        )
+        .with_columns(pl.col("has_played").fill_null(False))
+        # Fill missing values in the first_month column with each character's
+        # first month
+        .with_columns(first_month=pl.col("first_month").min().over("char"))
+        # Remove (char, month) rows where the month precedes the character's
+        # first month
+        .filter(pl.col("first_month") <= pl.col("month"))
+        .select(
+            "char",
+            "month",
+            "has_played",
+            "first_month",
+        )
+    )
+    return df_with_user_month
+
+
+r = add_churn(user_month, data)
+r.collect()
+```
+
+:::
+
+Finally, we can put everything together in a single function that takes the 
+historical data as input and returns a dataset with the churn indication as output:
+
+```{python}
+def build_churn_dataset(historical_data):
+    # Load the dataset
+    data = make_data(historical_data)
+    # Add the combinations of user months
+    user_month = make_user_month(historical_data)
+    churn_data = add_churn(user_month, data)
+    return churn_data
+
+churn_data = build_churn_dataset(df)
+churn_data.collect()
+```
+
+This dataframe contains a row for each (character, month) starting from that 
+character's first month up until the end of the dataset. In each row, the flag
+`has_played` informs us of whether the character logged in at any time in that 
+month, or if they haven't: this is the target that we want to predict on a monthly
+basis. 
+
+## Setting up the ML pipeline
+Before starting with feature engineering and actually training the model, it's 
+worth spending some time understanding the scenario we are in. 
+
+The main factor that complicates this scenario is the fact that we are dealing
+with sequential data points, which are therefore not independent of each other: 
+the position of a player at a time T is strongly correlated with their position
+at time T+1. 
+
+### Building a custom splitter
+
+For this reason, we need to use a splitter that returns sequential splits. A 
+common example of this is scikit-learn's
+[TimeSeriesSplit](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.TimeSeriesSplit.html). `TimeSeriesSplit` works by splitting the entire dataset in a given number 
+of splits; during cross-validation, at step K the splitter returns the first k
+splits as the train split, and the k+1 split as the validation split. 
+
+#### TODO add a diagram here
+
+A downside of `TimeSeriesSplit` is that the splitter assumes uniformly distributed
+samples, so that each singular split has the same size as the others. This is a 
+problem for our scenario: our samples are (character, month) pairs, and the number
+of characters in each month is never constant and indeed increases over time: 
+
+```{python}
+churn_data.group_by("month").agg(pl.len()).sort("len").collect()
+```
+
+For this reason, we need to define a custom splitter that is aware of the constraints
+we are working with. Given that we are working month-by-month, each split should
+contain all the characters that played in a specific month, and should be able to
+do so regardless of the fact that the number of characters changes.
+
+This is what we implement in the following splitter: 
+
+```{python}
+from datetime import datetime
+
+# We define the boundaries of the experiment manually
+MIN_DATE = datetime.strptime("2008-01-01", "%Y-%m-%d")
+MAX_DATE = datetime.strptime("2008-12-30", "%Y-%m-%d")
+
+class Splitter:
+    """
+    This splitter iterates over the months. It selects all the months up to the 
+    split point, which is our cutoff point: it's when we want to perform some 
+    operation on users that are marked as "churn risk", i.e., have been predicted
+    to churn by the model. 
+    """
+    def split(self, user_month, has_played=None):
+        """
+        user_month is our "X", while has_played is the target variable we want 
+        to predict
+        """
+        # has_played is not needed by this splitter, we are only splitting by month
+        del has_played
+        time_range = pl.date_range(MIN_DATE, MAX_DATE, "1mo", eager=True)
+        for split_point in time_range:
+            # The test month is the month *after* the split point
+            test_month = pl.Series([split_point]).dt.offset_by("1mo").first()
+            # Train indices are up to split_point
+            # We want a one-month gap
+            train_idx = (
+                user_month.with_row_index("idx")
+                .filter(pl.col("month") <= split_point)["idx"]
+                .to_list()
+            )
+            # Test indices are for the month after split_point
+            test_idx = (
+                user_month.with_row_index("idx")
+                .filter(pl.col("month") == test_month)["idx"]
+                .to_list()
+            )
+            if train_idx and test_idx:
+                print(f"Working on month {split_point}")
+                yield train_idx, test_idx
+
+    def get_n_splits(self, X, y):
+        return sum(1 for _ in self.split(X, y))
+```
+
+Like all other scikit-learn splitters, our splitter is a generator that, given 
+X and y (`user_month` and `has_played` in our case), returns the indices of the 
+samples that should be used in each split. 
+
+### 
+
+## Building the pipeline
+
+### Generating the features
+
+::: {.callout collapse="true"}
+#### Full feature engineering function
+```{python}
+# %%
+# This function is needed to make sure that we are only ever using historical data
+# up to the given month - 1 month. This is to avoid any leakage in the data.
+def add_features(X, historical_data, session_gap=30, use_location=True, add_gini=False):
+    features_by_month = []
+
+    # Create a session encoder with a 30 minute timeout
+    # This encoder is used as a stateless transformer so it is refitted for every
+    # month
+    session_encoder = SessionEncoder(
+        split_by="char", timestamp_col="timestamp", session_gap=session_gap
+    )
+    historical_data = historical_data.with_columns(
+        month=pl.col("timestamp").dt.truncate("1mo")
+    )
+    last_month = X["month"].max()
+
+    # Grouping by character and zone so that I can get the time spent in each zone
+    # Even if users leave the zone, this lets me find how much time a user spends in
+    # a given zone
+    session_encoder_zone = SessionEncoder(
+        split_by=["char", "zone"], timestamp_col="timestamp", session_gap=session_gap
+    )
+    # Adding fixed features: these features are fixed by character so they don't
+    # change over time.
+    # historical_data is selected up until the last month because if I select only
+    # a single month then any character that did not play in that month will be
+    # missing those features
+    X = X.join(
+        historical_data.filter(pl.col("month") <= last_month)
+        .select("char", "race", "charclass")
+        .unique("char"),
+        on="char",
+        how="left",
+        maintain_order="left",
+    ).with_row_index()  # adding row index so that I can reorder at the end after
+    # concatenating
+    # kinda defeats the point of using data ops but I think it simplifies the code
+
+    # This is used to add the historical data up to the given month
+    # Sorting months is not needed, but forces a consistent order (better for debugging)
+    for month in X["month"].unique().sort():
+        this_month_X = filter_df_by_month(X, month)
+
+        # Selecting only the entries in the historical data whose month + 2 is equal
+        # to the month I am trying to predict on.
+        # This means that if the "target month" is April, then the historical data
+        # should be filtered to keep only the rows where the current month + 2
+        # is equal to April, that is, the month is February. This is equivalent
+        # to saying "I want the rows for the current month - 2 months", but it's
+        # easier to implement
+        kept_historical_data = historical_data.with_columns(
+            pl.col("month").dt.offset_by("2mo")
+        ).filter(pl.col("month") == month)
+
+        # Session features: a session starts from a heartbeat, then it ends when
+        # no more heartbeats are detected for session_gap minutes
+        historical_data_with_sessions = session_encoder.fit_transform(
+            kept_historical_data
+        )
+        historical_data_with_sessions = get_session_duration(
+            historical_data_with_sessions
+        )
+
+        # General features: add session based and playerbase features
+        df_with_features = add_general_features(
+            this_month_X, historical_data_with_sessions
+        )
+
+        # Location features can be useful but take much longer to generate
+        if use_location:
+            # Zone-session features: a session lasts from the first time a character
+            # enters a zone to the moment it leaves it
+            # This is useful to get zone-specific features
+            historical_data_zone_sessions = session_encoder_zone.fit_transform(
+                kept_historical_data
+            )
+            historical_data_zone_sessions = get_session_duration(
+                historical_data_zone_sessions
+            )
+            df_with_features = add_location_features(
+                df_with_features,
+                historical_data_zone_sessions,
+                add_gini=add_gini,
+            )
+
+        features_by_month.append(df_with_features)
+        assert len(df_with_features) == len(this_month_X)
+
+    X_res = pl.concat(features_by_month, how="vertical")
+    X_res = X_res.sort("index").drop("index")
+
+    return X_res
+
+```
+
+:::
+
+### Putting everything together in a Data Op
+
+
+::: {.callout collapse="true"}
+#### Loading the file
+The dataset is very large, so we downsample it to reduce the execution time. 
+Note that we need to be deliberate with how we sample the data: rather than choosing
+a random subset of the values in the dataset, we need to be careful to select a
+subset of characters and keep all the rows for those characters. This ensures that 
+we have reliable information about all the characters. 
+
+```{python}
+def sample_by_char(df, fraction=0.1):
+    """
+    Sample a fraction of chars and return all their data.
+    """
+    data = df.filter(
+        pl.col("char").is_in(
+            df.select(pl.col("char").unique())
+            .sample(fraction=fraction, seed=42)["char"]
+            .implode()
+        )
+    )
+    return data
+
+
+def load(file, fraction=0.1):
+    if fraction == 1:
+        print("Returning all users")
+        return pl.scan_parquet(file)
+
+    print(f"Sampling {fraction * 100}% of the users")
+    df = pl.scan_parquet(file)
+    df = sample_by_char(df.collect(), fraction=fraction)
+    return df.lazy()
+```
+
+:::
+
+
+
+::: {.callout}
+
+#### Full Data Op construction script
+```{python}
+# %%a
+import skrub
+
+def make_data_op():
+    historical_data_file = skrub.var("historical_data_file")
+    historical_data = historical_data_file.skb.apply_func(load)
+    # In the guild column, null values are denoted by -1. This step replaces -1
+    # with None. 
+    historical_data = historical_data.with_columns(
+        pl.when(pl.col("guild") == -1)
+        .then(None)
+        .otherwise(pl.col("guild"))
+        .alias("guild")
+    )
+
+    user_month_has_played = historical_data.skb.apply_func(build_churn_dataset)
+    X = user_month_has_played["char", "month"].skb.mark_as_X(cv=Splitter())
+    y = user_month_has_played["has_played"].skb.mark_as_y()
+
+    # Hyperparameters
+    session_gap = skrub.choose_from([60], name="session_gap")
+    use_location = skrub.choose_bool(name="location_features")
+    add_gini = skrub.choose_bool(name="add_gini")
+
+    all_features = X.skb.apply_func(
+        add_features,
+        historical_data.collect(),
+        session_gap=session_gap,
+        use_location=use_location,
+        add_gini=add_gini
+    )
+    encoded = all_features.skb.apply(skrub.TableVectorizer())
+    # data_op = encoded.skb.apply(SimpleImputer()).skb.apply(LogisticRegression(), y=y)
+    data_op = encoded.skb.apply(
+        HGB(learning_rate=skrub.choose_float(0.01, 1.0, log=True)), y=y
+    )
+    # data_op = encoded.skb.apply(DummyClassifier(), y=y)
+    return data_op
+
+
+```
+
+:::
