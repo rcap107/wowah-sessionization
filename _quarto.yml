@@ -1,0 +1,36 @@
+project:
+  type: website
+  title: "WoWAH Player Churn Prediction"
+  output-dir: docs
+  render:
+    - "*.qmd"
+
+website:
+  title: "WoWAH Player Churn Prediction"
+  navbar:
+    title: "WoWAH Churn Prediction"
+    search: true
+    left:
+      - text: "Home"
+        href: index.html
+      - text: "Blog"
+        href: draft.html
+
+format:
+  html:
+    theme: cosmo
+    code-fold: false
+    code-overflow: wrap
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    highlight-style: github
+    self-contained: false
+    smooth-scroll: true
+    css: custom.css
+
+execute:
+  freeze: auto
+  cache: true
+
+jupyter: python3

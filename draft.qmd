@@ -463,7 +463,7 @@ def add_features(X, historical_data, session_gap=30, use_location=True, add_gini
 
 
 ::: {.callout collapse="true"}
-#### Loading the file
+#### Loading and downsampling the file
 The dataset is very large, so we downsample it to reduce the execution time. 
 Note that we need to be deliberate with how we sample the data: rather than choosing
 a random subset of the values in the dataset, we need to be careful to select a

@@ -9,3 +9,5 @@ data/
 
 */__pycache__/
 __pycache__/
+/.quarto/
+**/*.quarto_ipynb
