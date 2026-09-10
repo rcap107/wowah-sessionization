@@ -6,7 +6,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 NUM_WORKERS = os.cpu_count() or 4
 
 output_path = "../data/wowah_parsed_mp.csv"
-root_dir = "/Users/rcap/work/sessionization/WoWAH"
+root_dir = "~/work/sessionization/WoWAH"
 
 # Define regex pattern parts
 timestamp_pattern = r"\d+/\d+/\d+ \d+:\d+:\d+"
