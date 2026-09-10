@@ -11,7 +11,7 @@ interested in predicting a player's behavior in a given month, and decide whethe
 there is a risk that they will stop playing the next month. 
 To do so, we want to train a machine learning model that, given features based 
 on each player and on the overall playerbase, will be able to predict whether 
-player X will stop playing in the month of May 2009 (for example). 
+player X will stop playing in a given month. 
 
 Through the post we will build a full machine learning pipeline: we use  
 polars for dataframe operations; [skrub](https://skrub-data.org/stable/) is used
@@ -43,8 +43,9 @@ Avatar information includes:
 **Practical observations** 
 The dataset requires some preprocessing before it can be converted to a dataframe, 
 as it is stored in plaintext in a non-standard format. We handle the conversion
-procedure in a separate script, so that the rest of the process can use dataframe
-libraries. We also upload the processed dataset on 
+procedure in a [separate script](https://github.com/rcap107/wowah-sessionization/blob/main/src/parse_to_single_table.py),
+so that the rest of the process can use dataframe libraries. We also upload the processed 
+dataset on 
 [Kaggle: World of Warcraft Avatar History 2006-2009](https://www.kaggle.com/datasets/ryye107/world-of-warcraft-avatar-history).
 
 ### A quick exploration of the dataset
@@ -114,6 +115,7 @@ Since we are interested in monthly snapshots, the dataset is then reduced to sel
 only the unique (character, month) pairs. 
 
 ::: {.callout collapse="true"}
+#### Data preparation (click to expand)
 
 ```{python}
 def make_data(df):
@@ -147,7 +149,7 @@ of months.
 
 ::: {.callout collapse="true"}
 
-### Cross product
+### Cross product (click to expand)
 
 The cross product between two sets (in this case, months and unique users) 
 builds a new set where each element in the first set is paired with all elements
@@ -163,6 +165,7 @@ df1.join(df2, how="cross")
 :::
 
 ::: {.callout collapse="true"}
+#### Generate all unique combinations of users and months (click to expand)
 
 ```{python}
 def make_user_month(df):
@@ -205,7 +208,7 @@ about a character's playtime in January if they started playing in August!
 
 
 ::: {.callout collapse="true"}
-
+#### Add churn as a "has played" column (click to expand)
 ```{python}
 def add_churn(user_month, data):
     """
@@ -277,30 +280,28 @@ the position of a player at a time T is strongly correlated with their position
 at time T+1. 
 
 ### Building a custom splitter
-
 For this reason, we need to use a splitter that returns sequential splits. A 
 common example of this is scikit-learn's
 [TimeSeriesSplit](https://scikit-learn.org/stable/modules/generated/sklearn.model_selection.TimeSeriesSplit.html). `TimeSeriesSplit` works by splitting the entire dataset in a given number 
 of splits; during cross-validation, at step K the splitter returns the first k
 splits as the train split, and the k+1 split as the validation split. 
 
-#### TODO add a diagram here
+![](images/timeseriessplit.png){fig-align="center"}
+[Source](https://scikit-learn.org/stable/auto_examples/model_selection/plot_cv_indices.html#sphx-glr-auto-examples-model-selection-plot-cv-indices-py)
 
 A downside of `TimeSeriesSplit` is that the splitter assumes uniformly distributed
 samples, so that each singular split has the same size as the others. This is a 
 problem for our scenario: our samples are (character, month) pairs, and the number
 of characters in each month is never constant and indeed increases over time: 
 
-```{python}
-churn_data.group_by("month").agg(pl.len()).sort("len").collect()
-```
+![](images/user_months_plot.png){fig-align="center"}
 
 For this reason, we need to define a custom splitter that is aware of the constraints
 we are working with. Given that we are working month-by-month, each split should
 contain all the characters that played in a specific month, and should be able to
 do so regardless of the fact that the number of characters changes.
 
-This is what we implement in the following splitter: 
+This is what we implement here: 
 
 ```{python}
 from datetime import datetime
@@ -358,8 +359,8 @@ samples that should be used in each split.
 
 ### Generating the features
 
-::: {.callout collapse="true"}
-#### Full feature engineering function
+::: {.callout collapse="true" }
+#### Full feature engineering function (click to expand)
 ```{python}
 # %%
 # This function is needed to make sure that we are only ever using historical data
@@ -462,8 +463,8 @@ def add_features(X, historical_data, session_gap=30, use_location=True, add_gini
 ### Putting everything together in a Data Op
 
 
-::: {.callout collapse="true"}
-#### Loading and downsampling the file
+::: {.callout-tip collapse="true"}
+#### Loading and downsampling the file (click to expand)
 The dataset is very large, so we downsample it to reduce the execution time. 
 Note that we need to be deliberate with how we sample the data: rather than choosing
 a random subset of the values in the dataset, we need to be careful to select a
@@ -500,9 +501,9 @@ def load(file, fraction=0.1):
 
 
 
-::: {.callout}
+::: {.callout-tip}
 
-#### Full Data Op construction script
+#### Full Data Op construction script 
 ```{python}
 # %%a
 import skrub
