@@ -76,6 +76,8 @@ class Splitter:
 def filter_df_by_month(df, month):
     return df.filter(pl.col("month") == month)
 
+def add_lagged_features(historical_data, month):
+
 
 # %%
 # This function is needed to make sure that we are only ever using historical data
@@ -145,6 +147,9 @@ def add_features(X, historical_data, session_gap=30, use_location=True, add_gini
         df_with_features = add_general_features(
             this_month_X, historical_data_with_sessions
         )
+
+        # if add_lagged:
+        #     df_with_features = add_lagged_features(df_with_features, kept)
 
         # Location features can be useful but take much longer to generate
         if use_location:
