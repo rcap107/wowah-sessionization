@@ -28,7 +28,7 @@ lefts = [0] + df_grouped["cumsum"].to_list()#[:-1]  # left offset for each month
 n = len(months)
 
 split_labels = [f"Split {i+1}" for i in range(n)]
-cmap = plt.cm.viridis
+cmap = plt.cm.plasma
 colors = [cmap(j / max(n - 1, 1)) for j in range(n)]
 
 fig, ax = plt.subplots(figsize=(10, 6))
@@ -49,9 +49,9 @@ for i, total in enumerate(cumsums):
     ax.text(total, months[i], f"  {total:,}\n ({sign}{diff:,})", va="center", fontsize=8)
 
 ax.invert_yaxis()  # Split 1 at top for natural reading order
-ax.set_xlabel("Number of characters in the training set (users in the current month)")
+ax.set_xlabel("Number of avatars in the training set (users in the current month)")
 ax.set_ylabel("CV Split (Month)")
-ax.set_title("Number of unique characters in each CV split")
+ax.set_title("Number of unique avatars in each CV split")
 handles, labels = ax.get_legend_handles_labels()
 plt.legend(
     handles, labels,
@@ -60,7 +60,7 @@ plt.legend(
 )
 
 desc = """
-The number of unique characters in the training set increases with each CV split, 
+The number of unique avatars in the training set increases with each CV split, 
 and the increase is not constant. Later splits are much larger (up to 3 times the
 size of earlier splits).
 """
@@ -92,5 +92,5 @@ ax.annotate(
 plt.tight_layout()
 plt.show()
 # %%
-fig.savefig("user_months_plot.png")
+fig.savefig("../images/user_months_plot.png")
 # %%
