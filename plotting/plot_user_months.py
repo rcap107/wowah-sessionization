@@ -18,10 +18,6 @@ plt.show()
 # %%
 df_grouped = df_grouped.with_columns(cumsum=pl.col("len").cum_sum())
 # %%
-fig, ax = plt.subplots()
-ax.barh(df_grouped["month"].cast(str), df_grouped["cumsum"])
-plt.show()
-# %%
 months = df_grouped["month"].dt.strftime("%Y-%m")
 lens = df_grouped["len"].to_list()
 lefts = [0] + df_grouped["cumsum"].to_list()#[:-1]  # left offset for each month's segment
