@@ -22,14 +22,27 @@ done using Optuna through skrub's Data Ops.
 To keep the focus of this post on the process rather than the code, most of the 
 lower-level functions will be hidden in collapsible blocks. This includes much 
 of the pre-processing and feature engineering, although important sections will
-be highlighted as needed. 
+be highlighted as needed. Additionally, some detail on the implementation will
+be omitted from this writeup; for detailed comments and rationale on the code
+refer to the [repository](https://github.com/rcap107/wowah-sessionization).
 
 ### The dataset
 We rely on the [World of Warcraft Avatar History](https://qualinet.github.io/databases/world_of_warcraft_avatar_history_dataset/). 
 The dataset is built by scanning the game's servers roughly every 10 minutes, and
-logging information about each user in the Horde faction that is found online at 
-the timestamp's time. As we have a sequence of timestamps, this lets us track the
-behavior of players over time. 
+logging information about each **user character** in the Horde faction that is
+found online at the timestamp's time. As we have a sequence of timestamps, this
+lets us track the behavior of players over time. 
+
+
+::: {.callout-important}
+
+### Characters and avatars
+Through this write-up, we will use the terms "character" and "avatar" interchangeably:
+both terms will be used to refer to any single player-controlled character that 
+is found online when the server snapshot is taken. 
+
+:::
+
 
 Avatar information includes:
 
@@ -79,8 +92,8 @@ churn.
 Modeling user churn is a common application of machine learning models, though 
 the definition of churn is typically business' specific. In general, by "user churn"
 one refers to "a user that does not come back to the service". In the context of 
-WoW, user churn would refer to those users that do not come back to the game and
-suspend their monthly subscription. 
+this example, churn refers to **those characters that are not found online after
+a certain amount of time**, and that suspended their subscription.  
 As we do not have access to the actual subscription data, we assume that each 
 player suspends their subscription as soon as they stop playing for a month.
 
@@ -98,6 +111,8 @@ in July (i.e., their `has_played` flag will be `False` in July).
 
 :::
 
+![](images/diagram-months-churn.png)
+
 The idea is that, by knowing that user X will churn in July, we should be able to 
 use the month of June to apply some incentive to the user so they won't churn. 
 
@@ -111,7 +126,7 @@ each timestamp, truncated to have a monthly resolution; in the second we track t
 first month for each character. Additionally, we add a constant `has_played` column
 that acts as our "player was seen" flag. 
 
-Since we are interested in monthly snapshots, the dataset is then reduced to select
+We are interested in monthly snapshots, so the dataset is then reduced to select
 only the unique (character, month) pairs. 
 
 ::: {.callout collapse="true"}
@@ -139,13 +154,14 @@ data = make_data(df)
 :::
 
 Since we want to predict the behavior a player will have over a single month, our
-target variable will be grouped by "user-month" (e.g., `153_2026-12`). However, 
+target variable will be grouped by "user-month" (e.g., `ID153_2026-12`). However, 
 not all players will play at least once every month, so by relying exclusively 
 on the historical data we would be missing samples; to get around this problem 
 we generate a `char_month` dataset that contains all unique combinations of users
 and months by executing the cross-product between the unique users and the range
 of months. 
 
+![](images/diagram-cross-product.png)
 
 ::: {.callout collapse="true"}
 
@@ -287,6 +303,7 @@ of splits; during cross-validation, at step K the splitter returns the first k
 splits as the train split, and the k+1 split as the validation split. 
 
 ![](images/timeseriessplit.png){fig-align="center"}
+
 [Source](https://scikit-learn.org/stable/auto_examples/model_selection/plot_cv_indices.html#sphx-glr-auto-examples-model-selection-plot-cv-indices-py)
 
 A downside of `TimeSeriesSplit` is that the splitter assumes uniformly distributed
