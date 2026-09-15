@@ -30,11 +30,12 @@ from adding_features import (
     add_general_features,
     get_session_duration,
     add_location_features,
+    add_lagged_features,
 )
 
-MIN_DATE = datetime.strptime("2007-12-31", "%Y-%m-%d")
-# MIN_DATE = datetime.strptime("2008-01-01", "%Y-%m-%d")
-MAX_DATE = datetime.strptime("2008-12-30", "%Y-%m-%d")
+# MIN_DATE = datetime.strptime("2007-12-31", "%Y-%m-%d")
+MIN_DATE = datetime.strptime("2008-01-01", "%Y-%m-%d")
+MAX_DATE = datetime.strptime("2008-06-30", "%Y-%m-%d")
 # Actual ranges for the full dataset
 # MIN_DATE = datetime.strptime("2005-12-31", "%Y-%m-%d")
 # MAX_DATE = datetime.strptime("2009-01-10", "%Y-%m-%d")
@@ -44,7 +45,7 @@ MAX_DATE = datetime.strptime("2008-12-30", "%Y-%m-%d")
 # split point, which is the month during which we want to perform some operation
 # on users that are marked as "churn risks".
 class Splitter:
-    def split(self, user_month, has_played=None, interval="2w"):
+    def split(self, user_month, has_played=None, interval="1mo"):
         # has_played is not needed in this splitter since we are only splitting
         # based on the month
         del has_played
@@ -78,14 +79,18 @@ def filter_df_by_month(df, month):
     return df.filter(pl.col("month") == month)
 
 
-def add_lagged_features(historical_data, month):
-    pass
-
-
 # %%
 # This function is needed to make sure that we are only ever using historical data
 # up to the given month - 1 month. This is to avoid any leakage in the data.
-def add_features(X, historical_data, session_gap=30, use_location=True, add_gini=False, interval="2w"):
+def add_features(
+    X,
+    historical_data,
+    session_gap=30,
+    use_location=True,
+    add_gini=False,
+    interval="1mo",
+    lags=(1, 2),
+):
     features_by_month = []
 
     # Create a session encoder with a 30 minute timeout
@@ -149,9 +154,6 @@ def add_features(X, historical_data, session_gap=30, use_location=True, add_gini
             this_month_X, historical_data_with_sessions
         )
 
-        # if add_lagged:
-        #     df_with_features = add_lagged_features(df_with_features, kept)
-
         # Location features can be useful but take much longer to generate
         if use_location:
             # Zone-session features: a session lasts from the first time a character
@@ -173,6 +175,12 @@ def add_features(X, historical_data, session_gap=30, use_location=True, add_gini
         assert len(df_with_features) == len(this_month_X)
 
     X_res = pl.concat(features_by_month, how="vertical")
+    to_fill = pl.col("monthly_total_session_duration", "monthly_avg_session_duration")
+    X_res = X_res.with_columns(to_fill.fill_null(pl.duration(seconds=0)))
+    # Lagged features let the model see how each character's monthly features
+    # evolved over previous periods, so they must be computed on the full
+    # per-character timeline before the original row order is restored.
+    # X_res = add_lagged_features(X_res, lags=lags)
     X_res = X_res.sort("index").drop("index")
 
     return X_res
@@ -208,6 +216,9 @@ def make_data_op():
     session_gap = skrub.choose_from([30, 60, 15], name="session_gap")
     use_location = skrub.choose_bool(name="location_features")
     add_gini = skrub.choose_bool(name="add_gini")
+    lags = skrub.choose_from(
+        {"1": (1,), "1_2": (1, 2), "1_2_3": (1, 2, 3)}, name="lags"
+    )
 
     all_features = X.skb.apply_func(
         add_features,
@@ -215,6 +226,7 @@ def make_data_op():
         session_gap=session_gap,
         use_location=use_location,
         add_gini=add_gini,
+        lags=lags,
     )
     encoded = all_features.skb.apply(skrub.TableVectorizer())
     # data_op = encoded.skb.apply(SimpleImputer()).skb.apply(LogisticRegression(), y=y)
@@ -248,7 +260,7 @@ def cross_validate():
 
 def random_search():
     df = pl.read_parquet("data/wowah_churn_data.parquet")
-    df = sample_by_user(df, fraction=0.1)
+    df = sample_by_user(df, fraction=0.15)
     historical_data_file = "data/wowah_data_raw.parquet"
     search = make_data_op().skb.make_randomized_search(
         backend="optuna",
@@ -268,21 +280,18 @@ def evaluate():
     results = data_op.skb.eval({"historical_data_file": historical_data_file})
     return results
 
+if __name__ == "__main__":
+    results = cross_validate()
+    print(results)
+    # historical_data_file = "data/wowah_data_raw.parquet"
+    # data_op = make_data_op()
 
-# %%
-historical_data_file = "data/wowah_data_raw.parquet"
-data_op = make_data_op()
+    # # # %%
+    # search, env = random_search()
 
-# # %%
-search, env = random_search()
-
-search.fit(env)
+    # search.fit(env)
 
 
-# %%
-# results = cross_validate()
-# print(results)
-
-# # %%
-# results = evaluate()
-# print(results)
+    # # %%
+    # results = evaluate()
+    # print(results)

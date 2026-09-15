@@ -104,7 +104,7 @@ def add_monthly_player_features(df, hist_session_duration):
         left_on=["char", "month"],
         right_on=["char", "month"],
         how="left",
-        maintain_order="left"
+        maintain_order="left",
     )
 
 
@@ -162,7 +162,9 @@ def add_player_rarity(df, df_rarity):
     is marked as "hub".
     """
     df_users_rarity = (
-        df.lazy().join(df_rarity.lazy(), on="zone", how="left", maintain_order="left").select(
+        df.lazy()
+        .join(df_rarity.lazy(), on="zone", how="left", maintain_order="left")
+        .select(
             pl.col("char"),
             pl.col("rarity")
             .max()
@@ -235,7 +237,9 @@ def get_location_gini(df, df_rarity, with_hub=False):
     """
 
     if df_rarity.is_empty():
-        df_with_gini = df.select(pl.col("char"), pl.col("char").alias("gini").cast(pl.Float64))
+        df_with_gini = df.select(
+            pl.col("char"), pl.col("char").alias("gini").cast(pl.Float64)
+        )
         return df_with_gini
     if not with_hub:
         groups = (
@@ -293,5 +297,60 @@ def add_general_features(df, historical_data):
     df = add_class_features(df, historical_data)
     return df
 
-def add_lagged_features(df, historical_data):
-   pass 
+
+def add_lagged_features(
+    df,
+    lags=(1, 2),
+    diff_lags=(1,),
+    exclude_cols=(
+        "char",
+        "month",
+        "race",
+        "charclass",
+        "index",
+        "first_month",
+        "has_played",
+    ),
+):
+    """
+    Add lagged versions of the per-character monthly features so that a model
+    can learn how a character's behavior changes from month to month.
+
+    For every feature column not in `exclude_cols`, this adds a `<col>_lag{k}`
+    column for every k in `lags`, obtained by shifting the column by k periods
+    within each character's timeline (ordered by month). For numeric columns,
+    it also adds `<col>_diff{k}` columns holding the difference between the
+    current value and the value k periods before, to capture trends directly.
+
+    Rows corresponding to a character's first months have no history to lag
+    from, so the resulting lag/diff columns are null for those rows; this is
+    expected and should be handled downstream (e.g. by the vectorizer/imputer).
+    """
+    feature_cols = [c for c in df.columns if c not in exclude_cols]
+    numeric_cols = [c for c in feature_cols if df.schema[c].is_numeric()]
+
+    df = df.sort(["char", "month"])
+
+    lag_exprs = [
+        pl.col(c).shift(lag).over("char").alias(f"{c}_lag{lag}")
+        for c in feature_cols
+        for lag in lags
+    ]
+
+    # Unsigned integer columns (the various monthly_num_* counters) wrap around
+    # to huge positive values when a diff would be negative, so those need to
+    # be cast to a signed type first. Float columns are left uncast to avoid
+    # truncating fractional values (e.g. monthly_class_avg_level).
+    diff_exprs = []
+    for c in numeric_cols:
+        col_expr = (
+            pl.col(c).cast(pl.Int32)
+            if df.schema[c].is_unsigned_integer()
+            else pl.col(c)
+        )
+        for lag in diff_lags:
+            diff_exprs.append(
+                (col_expr - col_expr.shift(lag).over("char")).alias(f"{c}_diff{lag}")
+            )
+
+    return df.with_columns(lag_exprs + diff_exprs)

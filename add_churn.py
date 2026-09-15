@@ -31,7 +31,7 @@ This is the "churn" dataset, which we can then use to train a model.
 import polars as pl
 # %%
 
-def make_data(df, interval="2w"):
+def make_data(df, interval="1mo"):
     """
     Prepare a dataframe that contains the months in which each player has
     actually played. The column "has_played" is then set to True for those months.
@@ -51,7 +51,7 @@ def make_data(df, interval="2w"):
     return data
 
 
-def make_user_month(df, interval="2w"):
+def make_user_month(df, interval="1mo"):
     """
     Create a DataFrame with all unique combinations of users and months.
     This will be used to ensure that we have a row for each user for each month
