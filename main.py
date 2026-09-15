@@ -32,7 +32,8 @@ from adding_features import (
     add_location_features,
 )
 
-MIN_DATE = datetime.strptime("2008-01-01", "%Y-%m-%d")
+MIN_DATE = datetime.strptime("2007-12-31", "%Y-%m-%d")
+# MIN_DATE = datetime.strptime("2008-01-01", "%Y-%m-%d")
 MAX_DATE = datetime.strptime("2008-12-30", "%Y-%m-%d")
 # Actual ranges for the full dataset
 # MIN_DATE = datetime.strptime("2005-12-31", "%Y-%m-%d")
@@ -43,16 +44,16 @@ MAX_DATE = datetime.strptime("2008-12-30", "%Y-%m-%d")
 # split point, which is the month during which we want to perform some operation
 # on users that are marked as "churn risks".
 class Splitter:
-    def split(self, user_month, has_played=None):
+    def split(self, user_month, has_played=None, interval="2w"):
         # has_played is not needed in this splitter since we are only splitting
         # based on the month
         del has_played
-        time_range = pl.date_range(MIN_DATE, MAX_DATE, "1mo", eager=True)
+        time_range = pl.date_range(MIN_DATE, MAX_DATE, interval, eager=True)
         for split_point in time_range:
             # I can either use dateutils.relative delta
             # test_month = split_point + relativedelta(months=1)
             # Or do this with polars which is more consistent with the rest of the code
-            test_month = pl.Series([split_point]).dt.offset_by("1mo").first()
+            test_month = pl.Series([split_point]).dt.offset_by(interval).first()
             # Train indices are up to split_point excluded
             train_idx = (
                 user_month.with_row_index("idx")
@@ -76,13 +77,15 @@ class Splitter:
 def filter_df_by_month(df, month):
     return df.filter(pl.col("month") == month)
 
+
 def add_lagged_features(historical_data, month):
+    pass
 
 
 # %%
 # This function is needed to make sure that we are only ever using historical data
 # up to the given month - 1 month. This is to avoid any leakage in the data.
-def add_features(X, historical_data, session_gap=30, use_location=True, add_gini=False):
+def add_features(X, historical_data, session_gap=30, use_location=True, add_gini=False, interval="2w"):
     features_by_month = []
 
     # Create a session encoder with a 30 minute timeout
@@ -92,7 +95,7 @@ def add_features(X, historical_data, session_gap=30, use_location=True, add_gini
         split_by="char", timestamp_col="timestamp", session_gap=session_gap
     )
     historical_data = historical_data.with_columns(
-        month=pl.col("timestamp").dt.truncate("1mo")
+        month=pl.col("timestamp").dt.truncate(interval)
     )
     last_month = X["month"].max()
 
@@ -115,8 +118,6 @@ def add_features(X, historical_data, session_gap=30, use_location=True, add_gini
         how="left",
         maintain_order="left",
     ).with_row_index()  # adding row index so that I can reorder at the end after
-    # concatenating
-    # kinda defeats the point of using data ops but I think it simplifies the code
 
     # This is used to add the historical data up to the given month
     # Sorting months is not needed, but forces a consistent order (better for debugging)
@@ -131,7 +132,7 @@ def add_features(X, historical_data, session_gap=30, use_location=True, add_gini
         # to saying "I want the rows for the current month - 2 months", but it's
         # easier to implement
         kept_historical_data = historical_data.with_columns(
-            pl.col("month").dt.offset_by("2mo")
+            pl.col("month").dt.offset_by(interval)
         ).filter(pl.col("month") == month)
 
         # Session features: a session starts from a heartbeat, then it ends when
@@ -179,10 +180,8 @@ def add_features(X, historical_data, session_gap=30, use_location=True, add_gini
 
 def load(file, fraction=0.1):
     if fraction == 1:
-        print("Returning all users")
         return pl.scan_parquet(file)
 
-    print(f"Sampling {fraction * 100}% of the users")
     df = pl.scan_parquet(file)
     df = sample_by_user(df.collect(), fraction=fraction)
     return df.lazy()
@@ -206,7 +205,7 @@ def make_data_op():
     y = user_month_has_played["has_played"].skb.mark_as_y()
 
     # Hyperparameters
-    session_gap = skrub.choose_from([60], name="session_gap")
+    session_gap = skrub.choose_from([30, 60, 15], name="session_gap")
     use_location = skrub.choose_bool(name="location_features")
     add_gini = skrub.choose_bool(name="add_gini")
 
@@ -215,12 +214,13 @@ def make_data_op():
         historical_data.collect(),
         session_gap=session_gap,
         use_location=use_location,
-        add_gini=add_gini
+        add_gini=add_gini,
     )
     encoded = all_features.skb.apply(skrub.TableVectorizer())
     # data_op = encoded.skb.apply(SimpleImputer()).skb.apply(LogisticRegression(), y=y)
     data_op = encoded.skb.apply(
-        HGB(learning_rate=skrub.choose_float(0.01, 1.0, log=True)), y=y
+        # HGB(learning_rate=0.35), y=y
+        HGB(learning_rate=skrub.choose_float(0.1, 0.5, log=True)), y=y
     )
     # data_op = encoded.skb.apply(DummyClassifier(), y=y)
     return data_op
@@ -248,10 +248,14 @@ def cross_validate():
 
 def random_search():
     df = pl.read_parquet("data/wowah_churn_data.parquet")
-    df = sample_by_user(df, fraction=0.05)
+    df = sample_by_user(df, fraction=0.1)
     historical_data_file = "data/wowah_data_raw.parquet"
     search = make_data_op().skb.make_randomized_search(
-        backend="optuna", n_jobs=-1, n_iter=5
+        backend="optuna",
+        n_jobs=-1,
+        n_iter=16,
+        # study_name="wowah_churn_study",
+        storage="sqlite:///wowah_churn_study.db",
     )
     env = {"query": df, "historical_data_file": historical_data_file}
 
@@ -268,6 +272,17 @@ def evaluate():
 # %%
 historical_data_file = "data/wowah_data_raw.parquet"
 data_op = make_data_op()
+
+# # %%
+search, env = random_search()
+
+search.fit(env)
+
+
 # %%
-results = evaluate()
-print(results)
+# results = cross_validate()
+# print(results)
+
+# # %%
+# results = evaluate()
+# print(results)

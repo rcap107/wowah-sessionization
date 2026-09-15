@@ -293,3 +293,5 @@ def add_general_features(df, historical_data):
     df = add_class_features(df, historical_data)
     return df
 
+def add_lagged_features(df, historical_data):
+   pass 

@@ -31,7 +31,7 @@ This is the "churn" dataset, which we can then use to train a model.
 import polars as pl
 # %%
 
-def make_data(df):
+def make_data(df, interval="2w"):
     """
     Prepare a dataframe that contains the months in which each player has
     actually played. The column "has_played" is then set to True for those months.
@@ -42,8 +42,8 @@ def make_data(df):
 
     data = (
         df.with_columns(
-            pl.col("timestamp").dt.truncate("1mo").alias("month"),
-            first_month=pl.col("timestamp").dt.truncate("1mo").min().over("char"),
+            pl.col("timestamp").dt.truncate(interval).alias("month"),
+            first_month=pl.col("timestamp").dt.truncate(interval).min().over("char"),
         )
         .unique(subset=["char", "month"])
         .with_columns(pl.lit(True).alias("has_played"))
@@ -51,7 +51,7 @@ def make_data(df):
     return data
 
 
-def make_user_month(df):
+def make_user_month(df, interval="2w"):
     """
     Create a DataFrame with all unique combinations of users and months.
     This will be used to ensure that we have a row for each user for each month
@@ -65,15 +65,15 @@ def make_user_month(df):
     """
 
     months = pl.datetime_range(
-        start=df.select(pl.col("timestamp").dt.truncate("1mo").min()).collect().item(),
-        end=df.select(pl.col("timestamp").dt.truncate("1mo").max()).collect().item(),
-        interval="1mo",
+        start=df.select(pl.col("timestamp").dt.truncate(interval).min()).collect().item(),
+        end=df.select(pl.col("timestamp").dt.truncate(interval).max()).collect().item(),
+        interval=interval,
         closed="both",
         eager=True,
     )
 
     char_month = (
-        df.with_columns(month_left=pl.col("timestamp").dt.truncate("1mo"))
+        df.with_columns(month=pl.col("timestamp").dt.truncate(interval))
         .select("char")
         .unique()
         .join(months.to_frame(name="month").lazy(), how="cross")
