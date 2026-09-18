@@ -33,12 +33,11 @@ from adding_features import (
     add_lagged_features,
 )
 
-# MIN_DATE = datetime.strptime("2007-12-31", "%Y-%m-%d")
-MIN_DATE = datetime.strptime("2008-01-01", "%Y-%m-%d")
-MAX_DATE = datetime.strptime("2008-06-30", "%Y-%m-%d")
+# MIN_DATE = datetime.strptime("2008-01-01", "%Y-%m-%d")
+# MAX_DATE = datetime.strptime("2008-06-30", "%Y-%m-%d")
 # Actual ranges for the full dataset
-# MIN_DATE = datetime.strptime("2005-12-31", "%Y-%m-%d")
-# MAX_DATE = datetime.strptime("2009-01-10", "%Y-%m-%d")
+MIN_DATE = datetime.strptime("2006-01-01", "%Y-%m-%d")
+MAX_DATE = datetime.strptime("2009-01-10", "%Y-%m-%d")
 
 
 # The splitter iterates over the months and selects all the months up to the
@@ -82,8 +81,13 @@ def filter_df_by_month(df, month):
 # %%
 # This function is needed to make sure that we are only ever using historical data
 # up to the given month - 1 month. This is to avoid any leakage in the data.
-def add_features(
-    X,
+#
+# It builds the feature table for every (char, month) pair a character could
+# appear in (not just the rows asked for by a given CV fold), because lagged
+# features need each character's full monthly timeline: a CV fold's X may
+# contain a single month (e.g. the test fold), which would otherwise leave
+# every lag/diff column null.
+def build_feature_table(
     historical_data,
     session_gap=30,
     use_location=True,
@@ -102,7 +106,6 @@ def add_features(
     historical_data = historical_data.with_columns(
         month=pl.col("timestamp").dt.truncate(interval)
     )
-    last_month = X["month"].max()
 
     # Grouping by character and zone so that I can get the time spent in each zone
     # Even if users leave the zone, this lets me find how much time a user spends in
@@ -110,24 +113,23 @@ def add_features(
     session_encoder_zone = SessionEncoder(
         split_by=["char", "zone"], timestamp_col="timestamp", session_gap=session_gap
     )
+
+    # Every (char, month) pair a character could appear in, whether or not they
+    # played that month: the full grid lag/diff features are built over.
+    user_month = build_churn_dataset(historical_data.lazy()).select("char", "month")
     # Adding fixed features: these features are fixed by character so they don't
     # change over time.
-    # historical_data is selected up until the last month because if I select only
-    # a single month then any character that did not play in that month will be
-    # missing those features
-    X = X.join(
-        historical_data.filter(pl.col("month") <= last_month)
-        .select("char", "race", "charclass")
-        .unique("char"),
+    user_month = user_month.join(
+        historical_data.select("char", "race", "charclass").unique("char"),
         on="char",
         how="left",
         maintain_order="left",
-    ).with_row_index()  # adding row index so that I can reorder at the end after
+    )
 
     # This is used to add the historical data up to the given month
     # Sorting months is not needed, but forces a consistent order (better for debugging)
-    for month in X["month"].unique().sort():
-        this_month_X = filter_df_by_month(X, month)
+    for month in user_month["month"].unique().sort():
+        this_month_X = filter_df_by_month(user_month, month)
 
         # Selecting only the entries in the historical data whose month + 2 is equal
         # to the month I am trying to predict on.
@@ -174,16 +176,21 @@ def add_features(
         features_by_month.append(df_with_features)
         assert len(df_with_features) == len(this_month_X)
 
-    X_res = pl.concat(features_by_month, how="vertical")
+    feature_table = pl.concat(features_by_month, how="vertical")
     to_fill = pl.col("monthly_total_session_duration", "monthly_avg_session_duration")
-    X_res = X_res.with_columns(to_fill.fill_null(pl.duration(seconds=0)))
-    # Lagged features let the model see how each character's monthly features
-    # evolved over previous periods, so they must be computed on the full
-    # per-character timeline before the original row order is restored.
-    # X_res = add_lagged_features(X_res, lags=lags)
-    X_res = X_res.sort("index").drop("index")
+    feature_table = feature_table.with_columns(
+        to_fill.fill_null(pl.duration(seconds=0))
+    )
+    if lags is not None:
+        feature_table = add_lagged_features(feature_table, lags=lags)
+    return feature_table
 
-    return X_res
+
+def add_features(X, feature_table):
+    """Attach this CV fold's (char, month) rows to the precomputed features."""
+    return X.join(
+        feature_table, on=["char", "month"], how="left", maintain_order="left"
+    )
 
 
 def load(file, fraction=0.1):
@@ -198,7 +205,7 @@ def load(file, fraction=0.1):
 # %%
 def make_data_op():
     historical_data_file = skrub.var("historical_data_file")
-    historical_data = historical_data_file.skb.apply_func(load)
+    historical_data = historical_data_file.skb.apply_func(load, fraction=0.01)
     # In the original data, "guild == -1" means "no guild", so I'm replacing -1
     # with nulls.
     historical_data = historical_data.with_columns(
@@ -217,24 +224,25 @@ def make_data_op():
     use_location = skrub.choose_bool(name="location_features")
     add_gini = skrub.choose_bool(name="add_gini")
     lags = skrub.choose_from(
-        {"1": (1,), "1_2": (1, 2), "1_2_3": (1, 2, 3)}, name="lags"
+        {"no": None, "1": (1,), "1_2": (1, 2), "1_2_3": (1, 2, 3)}, name="lags"
     )
 
-    all_features = X.skb.apply_func(
-        add_features,
-        historical_data.collect(),
+    # Built from the full historical data (a plain, non-X node), independent of
+    # the CV fold split of X, so lagged features always see each character's
+    # complete monthly timeline regardless of which fold is being evaluated.
+    feature_table = historical_data.collect().skb.apply_func(
+        build_feature_table,
         session_gap=session_gap,
         use_location=use_location,
         add_gini=add_gini,
         lags=lags,
     )
+    all_features = X.skb.apply_func(add_features, feature_table)
     encoded = all_features.skb.apply(skrub.TableVectorizer())
-    # data_op = encoded.skb.apply(SimpleImputer()).skb.apply(LogisticRegression(), y=y)
     data_op = encoded.skb.apply(
-        # HGB(learning_rate=0.35), y=y
         HGB(learning_rate=skrub.choose_float(0.1, 0.5, log=True)), y=y
-    )
-    # data_op = encoded.skb.apply(DummyClassifier(), y=y)
+    ).skb.with_scoring("roc_auc")
+    # data_op = encoded.skb.apply(DummyClassifier(), y=y) #.skb.with_scoring("roc_auc")
     return data_op
 
 
@@ -249,11 +257,9 @@ def get_env():
 
 
 def cross_validate():
-    df = pl.read_parquet("data/wowah_churn_data.parquet")
-    df = sample_by_user(df, fraction=0.1)
-    historical_data_file = "data/wowah_data_raw.parquet"
+    historical_data_file = "data/wowah_data_all.parquet"
     results = make_data_op().skb.cross_validate(
-        {"query": df, "historical_data_file": historical_data_file}
+        {"historical_data_file": historical_data_file}
     )
     return results
 
@@ -269,7 +275,7 @@ def random_search():
         # study_name="wowah_churn_study",
         storage="sqlite:///wowah_churn_study.db",
     )
-    env = {"query": df, "historical_data_file": historical_data_file}
+    env = {"historical_data_file": historical_data_file}
 
     return search, env
 
@@ -280,18 +286,11 @@ def evaluate():
     results = data_op.skb.eval({"historical_data_file": historical_data_file})
     return results
 
+
 if __name__ == "__main__":
-    results = cross_validate()
-    print(results)
-    # historical_data_file = "data/wowah_data_raw.parquet"
-    # data_op = make_data_op()
-
-    # # # %%
-    # search, env = random_search()
-
-    # search.fit(env)
-
-
-    # # %%
-    # results = evaluate()
+    # results = cross_validate()
     # print(results)
+
+    search, env = random_search()
+
+    search.fit(env)
