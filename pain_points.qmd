@@ -1,0 +1,139 @@
+---
+title: "Pain points simplified by skrub DataOps"
+subtitle: "Lessons from the WoWAH churn / sessionization pipeline"
+author: "Based on the sessionization repo and the skrub user guide"
+format:
+  revealjs:
+    theme: default
+    slide-number: true
+    show-notes: true
+    incremental: false
+    code-fold: false
+    code-overflow: wrap
+    highlight-style: github
+---
+
+## The example in one slide
+
+- **Dataset**: WoWAH — ~11M timestamped "heartbeats" (one snapshot every ~10 min, 2006–2009, 91k avatars)
+- **Task**: predict whether a player churns (no activity) in month *M+1*
+- **Unit of analysis**: the (character, month) pair, built as a cross-product grid
+- **Features**: sessionization (`SessionEncoder`), monthly aggregates, zone-rarity / Gini location features, lag & diff features
+- **Model**: `HistGradientBoostingClassifier` + `TableVectorizer`, month-by-month temporal CV
+- **Glue**: everything assembled as a single skrub Data Op
+
+::: {.notes}
+The pipeline lives in `main.py` (with `draft.qmd` as the write-up version). It loads raw logs from a parquet file, builds churn labels with `add_churn.py`, engineers features in `adding_features.py` / `location_features.py`, and assembles the whole thing into a skrub DataOp via `make_data_op()`. Each of the following slides is a pain point a data scientist hits in this kind of project, and how the skrub DataOps design (per the user guide in `skrub/_docs/`) addresses it.
+:::
+
+## Pain point 1 — Leakage in temporal feature engineering
+
+- Features must only use data available at scoring time: history is filtered with a **2-month offset** before the target month
+- Session detection and aggregations are **stateful w.r.t. time**: doing them once on the full table leaks the future
+- sklearn `Pipeline` cannot do this: `X`/`y` must exist before the pipeline starts, and wrangling lives outside
+- skrub docs warn explicitly: *aggregation can introduce data leakage* → wrap it in the DataOps plan
+- In the example: `X` and `y` are cut **inside** the plan (`mark_as_X` / `mark_as_y`), so each CV fold re-runs the feature code on training data only
+
+::: {.notes}
+This is the central difficulty of the example (`main.py:90-186`). If the target month is April, features may only be built from February data and earlier (`main.py:136-143`). The skrub sessionization doc (`modules/multi_column_operations/sessionization.rst`) carries a warning box saying aggregation leaks unless it is re-fit per fold — either wrapped in an sklearn transformer or done "with the skrub Data Ops framework". DataOps bind the whole wrangling DAG to the prediction, so `skb.cross_validate()` re-executes the leakage-safe steps inside every fold automatically, instead of the user hand-rolling fold-by-fold feature construction.
+:::
+
+## Pain point 2 — Cross-validation that respects irregular time
+
+- Off-the-shelf `TimeSeriesSplit` assumes folds of **equal size**
+- Here the number of (char, month) rows **grows every month** — folds are unbalanced by nature
+- So the repo writes a **custom splitter**: expanding window over months, test = the following month only (`main.py:46-74`)
+- With DataOps: one line plugs it in — `skb.mark_as_X(cv=Splitter())`
+- The same splitter is then honored by `cross_validate`, `train_test_split`, randomized search, and scoring — no per-fold orchestration code
+
+::: {.notes}
+The custom `Splitter` (`main.py:46`) iterates month by month, yields train indices up to the split point and test indices for the next month. In a vanilla setup, the user would have to drive CV manually (loop over folds, build features per fold, fit, score). In the DataOps plan, `mark_as_X(cv=Splitter())` (`main.py:219`) makes the splitter part of the estimator-like object, so `skb.cross_validate()` (`main.py:259`) and the Optuna search reuse it consistently. The docs (`tuning_validating_data_ops.rst`) also show how extra splitter arguments (e.g. groups) can be passed through `mark_as_X`.
+:::
+
+## Pain point 3 — Tuning wrangling choices, not just model knobs
+
+- Real choices live in the **feature code**: `session_gap` (15/30/60 min), include location features?, add Gini?, which lags?
+- These are not model hyperparameters — they are **data pipeline decisions** with big performance and runtime impact
+- DataOps: drop choices inline where the value is used — `choose_from`, `choose_bool`, `choose_float(log=True)`
+- One call turns the whole DAG into a search: `skb.make_randomized_search(backend="optuna", ...)` (`main.py:267-280`)
+- The repo shows the payoff: a persistent Optuna study (`wowah_churn_study.db`), results inspectable across runs
+
+::: {.notes}
+In `make_data_op()` (`main.py:222-228`), `session_gap`, `use_location`, `add_gini` and `lags` are declared with `choose_from` / `choose_bool`, and the model's `learning_rate` with `choose_float(0.1, 0.5, log=True)`. The hyperparameter tuning doc (`validation/hyperparameter_tuning.rst`) explains the principle: replace values with choice objects, and the same plan serves previews, defaults (`describe_defaults`), grid/randomized search, and Optuna. Crucially, choices placed inside *wrangling* functions get tuned too — impossible with a vanilla sklearn grid search over the final estimator.
+:::
+
+## Pain point 4 — One pipeline object, many inputs, deployable
+
+- Multi-input pipelines (raw log file **path**, churn table, config) are usually scattered across scripts with brittle glue
+- The example treats even the file path as an input: `skrub.var("historical_data_file")`
+- `apply_func` inserts arbitrary Python (loading, sampling, churn-label construction) as graph nodes
+- The final DataOp behaves like one sklearn estimator: `.fit()`, save, load, `skb.eval(env)`, `skb.cross_validate(env)`
+- Production: replay the *exact* trained DAG on a new month — no re-implementation drift
+
+::: {.notes}
+`make_data_op()` (`main.py:206`) starts from a *path* variable, applies `load` (which subsamples by user), fixes the `guild == -1` sentinel, builds churn labels, marks X/y, adds features, vectorizes, and fits HGB — one object. `cross_validate()` and `evaluate()` just pass different environments (`{"historical_data_file": ...}`) to the same plan (`main.py:259-287`). The docs' `what_are_data_ops.rst` frames this as: a DataOp is a complete pipeline from data loading to prediction that can be fitted, tuned, cross-validated and saved like a scikit-learn estimator; `data_ops_vs_alternatives.rst` contrasts this with `Pipeline`, which is a linear sequence on a single table with a fixed row count.
+:::
+
+## Pain point 5 — Debugging a complex DAG
+
+- With cross-products, two `SessionEncoder`s, joins, lags... a join bug surfaces **far from its cause**
+- Eager **previews**: pass a value to `var()` and every node shows its result immediately — errors surface at the offending step
+- `skb.full_report()` emits an HTML report: every node's name, description, predecessors, fitted estimator, and **data preview**
+- On failure, the report shows the offending node and the traceback
+- `describe_steps`, `describe_param_grid`, `describe_defaults` document the plan as it grows
+
+::: {.notes}
+The example's pipeline has deep, branchy nodes (churn cross-product grid, session and zone-session encoders, rarity/Gini features, lag/diff expansion). The docs (`basics/using_previews.rst`, `ml_pipeline/evaluating_debugging_data_ops.rst`) describe exactly this workflow: previews catch errors early (e.g. a wrong column name in a Polars expression fails right away), and `full_report()` produces a browsable HTML execution report (stored under `skrub_data/execution_reports` by default). This replaces the usual print/pytest-debug loop on a multi-stage dataframe pipeline.
+:::
+
+## Pain point 6 — Big data: subsampling and caching
+
+- 11M rows → interactive development must be fast, but **sampling must preserve players' full trajectories** (`sample_by_user`, not random rows)
+- Feature building (`build_feature_table`) is **very expensive** — naive re-runs during search would explode cost
+- DataOps: `skb.subsample()` for development is **automatically off** for real `eval` / `cross_validate` runs
+- Caching (`skrub.set_config(cache=True)`) persists expensive node results on disk **across trials** — changing only `learning_rate` doesn't recompute features
+- In-memory reuse is free: the `feature_table` node is computed once per parameter set and shared (`main.py:229-239`)
+
+::: {.notes}
+`load()` (`main.py:196-202`) samples whole characters to keep trajectories intact — exactly the kind of domain-specific subsampling the docs' subsampling page (`ml_pipeline/subsampling_data.rst`) anticipates, with the caveat that subsampling is "local" to the variable it is applied to. The caching doc (`ml_pipeline/caching.rst`) is the counterpart for cost: results of `skb.apply` / `skb.apply_func` nodes are keyed and persisted, so hyperparameter trials that share early steps (all feature construction) skip recomputation; `no_cache=True` and cache pruning (`target_cache_size`) give control. Caveat from the docs: cache invalidation of changed helper code is best-effort — delete the cache when actively editing.
+:::
+
+## Pain point 7 — Stay in your dataframe API inside the plan
+
+- Frameworks usually force you to leave Polars once you enter "pipeline land"
+- DataOps are **transparent**: Polars methods are called directly on DataOps (`historical_data.with_columns(...)`, `.collect()`, indexing, joins)
+- Python control flow (`for month in ...`) can't run eagerly on a DataOp → put it in `@deferred` / `apply_func` functions
+- Each such function appears as **one graph node** — good for reports and caching granularity
+- The example leans on this everywhere: `build_churn_dataset`, `build_feature_table`, `add_features`
+
+::: {.notes}
+`basics/direct_access_methods.rst` documents the "transparent DataOp" design: any non-`.skb` attribute/method goes to the underlying object, so the example writes idiomatic Polars throughout (`main.py:211-216`). `basics/control_flow.rst` explains the eager-vs-deferred rule: `for` over a DataOp raises, so loops live inside `@skrub.deferred` functions or are attached via `skb.apply_func` — in the example the whole per-month feature loop is deferred into `build_feature_table` (`main.py:90`). One hygiene rule from the docs: transformations must return new values, not mutate in place — Polars' expression style fits this naturally.
+:::
+
+## The open tension (discussion)
+
+- `main.py` **precomputes** `feature_table` once on the full history, then joins it onto each fold's `X`
+- Why: lag/diff features need each character's **complete monthly timeline** — a single-month fold would leave every lag null (`main.py:82-89` comment)
+- But the write-up admits: *"kinda defeats the point of using data ops but I think it simplifies the code"* (`draft.qmd:419`)
+- Strict per-fold feature building is leakage-proof but slow; the static table is fast but frozen per hyperparameter set
+- DataOps makes this trade-off **explicit and inspectable**: the DAG documents exactly what is recomputed per fold vs. cached/shared
+
+::: {.notes}
+This is the design decision the example is really about. Two strategies coexist: (1) build features inside the graph from `X` (draft.qmd's `add_features` loop) — perfectly leakage-safe, recomputed per fold; (2) precompute a `feature_table` node from the full historical data (`main.py:229-239`) so lagged features see all months, then left-join each fold's rows. Option (2) relies on the argument that features are keyed by (char, month ≤ cutoff) so no future data can leak *into the fold's rows* — but the plan no longer enforces it mechanically; the guarantee lives in `build_feature_table`'s code. A natural follow-up: move the per-month filtering inside the plan and use skrub caching to recover speed, so leakage safety is structural rather than conventional.
+:::
+
+## Takeaways
+
+| Pain point | skrub DataOps answer |
+|---|---|
+| Temporal leakage | Wrangling lives inside the plan, re-run per fold |
+| Irregular time CV | Custom splitter via `mark_as_X(cv=...)` |
+| Tuning data choices | `choose_*` inline + Optuna-backed search |
+| Many inputs, one artifact | `var()` + one estimator-like DataOp |
+| Debugging | Previews + `full_report()` per node |
+| Big data | `subsample()` + disk caching |
+| API freedom | Transparent Polars access, `@deferred` for logic |
+
+::: {.notes}
+Closing summary: the sessionization example is a good stress test because it combines every hard part of applied ML — temporal structure, custom validation, heavy feature engineering, big data, and tuning of pipeline-level decisions. The skrub DataOps docs position the framework precisely where sklearn `Pipeline` stops: DAG-shaped, multi-input, leakage-aware, tunable end-to-end, and inspectable. The remaining open question (per-fold vs. precomputed features) is itself made visible by the plan structure rather than hidden in scripts.
+:::
