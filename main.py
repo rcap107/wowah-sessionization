@@ -105,18 +105,12 @@ def build_feature_table(
     )
     historical_data = historical_data.with_columns(
         month=pl.col("timestamp").dt.truncate(interval)
-    )
+    ).lazy()
 
-    # Grouping by character and zone so that I can get the time spent in each zone
-    # Even if users leave the zone, this lets me find how much time a user spends in
-    # a given zone
-    session_encoder_zone = SessionEncoder(
-        split_by=["char", "zone"], timestamp_col="timestamp", session_gap=session_gap
-    )
 
     # Every (char, month) pair a character could appear in, whether or not they
     # played that month: the full grid lag/diff features are built over.
-    user_month = build_churn_dataset(historical_data.lazy()).select("char", "month")
+    user_month = build_churn_dataset(historical_data).select("char", "month").lazy()
     # Adding fixed features: these features are fixed by character so they don't
     # change over time.
     user_month = user_month.join(
@@ -124,7 +118,7 @@ def build_feature_table(
         on="char",
         how="left",
         maintain_order="left",
-    )
+    ).collect()
 
     # This is used to add the historical data up to the given month
     # Sorting months is not needed, but forces a consistent order (better for debugging)
@@ -144,28 +138,34 @@ def build_feature_table(
 
         # Session features: a session starts from a heartbeat, then it ends when
         # no more heartbeats are detected for session_gap minutes
-        historical_data_with_sessions = session_encoder.fit_transform(
-            kept_historical_data
-        )
-        historical_data_with_sessions = get_session_duration(
-            historical_data_with_sessions
+        historical_data_sessions = session_encoder.fit_transform(
+            kept_historical_data.collect()
+        ).lazy()
+        historical_data_sessions = get_session_duration(
+            historical_data_sessions
         )
 
         # General features: add session based and playerbase features
         df_with_features = add_general_features(
-            this_month_X, historical_data_with_sessions
+            this_month_X.lazy(), historical_data_sessions
         )
 
         # Location features can be useful but take much longer to generate
         if use_location:
+            # Grouping by character and zone so that I can get the time spent in each zone
+            # Even if users leave the zone, this lets me find how much time a user spends in
+            # a given zone
+            session_encoder_zone = SessionEncoder(
+                split_by=["char", "zone"], timestamp_col="timestamp", session_gap=session_gap, suffix="session_id_zone"
+            )
             # Zone-session features: a session lasts from the first time a character
             # enters a zone to the moment it leaves it
             # This is useful to get zone-specific features
             historical_data_zone_sessions = session_encoder_zone.fit_transform(
-                kept_historical_data
-            )
+                kept_historical_data.collect()
+            ).lazy()
             historical_data_zone_sessions = get_session_duration(
-                historical_data_zone_sessions
+                historical_data_zone_sessions, session_column="timestamp_session_id_zone"
             )
             df_with_features = add_location_features(
                 df_with_features,
@@ -215,7 +215,9 @@ def make_data_op():
         .alias("guild")
     )
 
-    user_month_has_played = historical_data.skb.apply_func(build_churn_dataset)
+    user_month_has_played = historical_data.skb.apply_func(
+        build_churn_dataset
+    ).skb.set_name("query")
     X = user_month_has_played["char", "month"].skb.mark_as_X(cv=Splitter())
     y = user_month_has_played["has_played"].skb.mark_as_y()
 
@@ -272,7 +274,7 @@ def random_search():
         backend="optuna",
         n_jobs=-1,
         n_iter=16,
-        # study_name="wowah_churn_study",
+        study_name="wowah_churn_study",
         storage="sqlite:///wowah_churn_study.db",
     )
     env = {"historical_data_file": historical_data_file}
@@ -284,10 +286,11 @@ def evaluate():
     historical_data_file = "data/wowah_data_raw.parquet"
     data_op = make_data_op()
     results = data_op.skb.eval({"historical_data_file": historical_data_file})
-    return results
+    return results, data_op
 
 
 if __name__ == "__main__":
+    # results, data_op = evaluate()
     # results = cross_validate()
     # print(results)
 

@@ -64,17 +64,25 @@ def add_class_features(df, hist_session_duration):
         left_on=["charclass", "month"],
         right_on=["charclass", "month"],
         how="left",
+        maintain_order="left",
     )
 
 
 def add_session_features(df, hist_session_duration):
+    s_duration = pl.col("session_duration")
+
     monthly_duration = (
         hist_session_duration.unique("timestamp_session_id")
         .group_by("char", "month")
         .agg(
-            pl.col("session_duration").sum().alias("monthly_total_session_duration"),
-            pl.col("session_duration").mean().alias("monthly_avg_session_duration"),
-            pl.col("session_duration").count().alias("monthly_num_sessions"),
+            s_duration.sum().alias("monthly_total_session_duration"),
+            s_duration.mean().alias("monthly_avg_session_duration"),
+            s_duration.std()
+            .fill_null(pl.duration(seconds=0))
+            .alias("monthly_std_session_duration"),
+            s_duration.count().alias("monthly_num_sessions"),
+            pl.col("session_start").mean().alias("monthly_avg_session_start"),
+            pl.col("session_end").mean().alias("monthly_avg_session_end"),
         )
     )
     df = df.join(
@@ -85,9 +93,6 @@ def add_session_features(df, hist_session_duration):
         maintain_order="left",
     )
     return df
-
-
-# TODO: check joins for maintain_order
 
 
 def add_monthly_player_features(df, hist_session_duration):
@@ -150,7 +155,7 @@ def get_zone_rarity(df):
     return df_rarity
 
 
-def add_player_rarity(df, df_rarity):
+def add_player_rarity(df):
     """
     This function finds the average and max rarity of the locations a user visits,
     based on the overall rarity computed across the playerbase.
@@ -161,34 +166,19 @@ def add_player_rarity(df, df_rarity):
     The "in_hub" column tracks the fraction of time a player spends in a zone that
     is marked as "hub".
     """
+    rarity = pl.col("rarity")
+    is_hub = pl.col("is_hub")
     df_users_rarity = (
         df.lazy()
-        .join(df_rarity.lazy(), on="zone", how="left", maintain_order="left")
         .select(
             pl.col("char"),
-            pl.col("rarity")
-            .max()
-            .over(
-                "char",
-            )
-            .alias("max_rarity"),
-            pl.col("rarity")
-            .mean()
-            .over(
-                "char",
-            )
-            .alias("mean_rarity"),
+            rarity.max().over("char").alias("max_rarity"),
+            rarity.mean().over("char").alias("mean_rarity"),
             (
-                pl.col("is_hub")
-                .sum()
-                .over(
+                is_hub.sum().over(
                     "char",
                 )
-                / pl.col("is_hub")
-                .count()
-                .over(
-                    "char",
-                )
+                / is_hub.count().over("char")
             ).alias("in_hub"),
         )
     ).unique("char")
@@ -228,48 +218,49 @@ def gini(group: pl.DataFrame):
     return sorted.select("char", "gini").unique()
 
 
-def get_location_gini(df, df_rarity, with_hub=False):
+def get_location_gini(df, with_hub=False):
     """
     with_hub allows to choose whether we want to compute gini with hubs (locations
     where everyone goes)
 
     players with low gini tend to stick to low-level/hub areas
     """
-
-    if df_rarity.is_empty():
+    df = df.collect()
+    if df.is_empty():
         df_with_gini = df.select(
             pl.col("char"), pl.col("char").alias("gini").cast(pl.Float64)
         )
         return df_with_gini
     if not with_hub:
         groups = (
-            df.join(df_rarity, on="zone")
+            df
             .filter(~pl.col("is_hub"))
             .group_by("char", "zone")
         )
     else:
-        groups = df.join(df_rarity, on="zone").group_by("char", "zone")
+        groups = df.group_by("char", "zone")
     df_with_gini = (
         groups.agg(pl.sum("session_duration")).group_by("char").map_groups(gini)
     )
 
-    return df_with_gini
+    return df_with_gini.lazy()
 
 
-def add_gini_features(df, historical_data_zones, df_rarity):
-    df_with_gini = get_location_gini(historical_data_zones, df_rarity, with_hub=False)
+def add_gini_features(df, historical_data_zones):
+    df_with_gini = get_location_gini(historical_data_zones, with_hub=False)
     return df.join(
         df_with_gini.lazy(),
         on=[
             "char",
         ],
         how="left",
+        maintain_order="left",
     )
 
 
-def add_rarity_features(df, historical_data_zones, location_rarity):
+def add_rarity_features(df, historical_data_zones):
     return df.join(
-        add_player_rarity(historical_data_zones, location_rarity),
+        add_player_rarity(historical_data_zones),
         on="char",
         how="left",
         maintain_order="left",
@@ -283,10 +274,13 @@ def add_location_features(df, historical_data_zones, add_gini=False):
     contains the full sessions
     """
     # zone rarity is a useful indicator for various features
-    location_rarity = get_zone_rarity(historical_data_zones)
-    df = add_rarity_features(df.lazy(), historical_data_zones, location_rarity)
+    location_rarity = get_zone_rarity(historical_data_zones.collect())
+    historical_data_zones = historical_data_zones.join(
+        location_rarity.lazy(), on="zone", how="left", maintain_order="left"
+    )
+    df = add_rarity_features(df.lazy(), historical_data_zones)
     if add_gini:
-        df = add_gini_features(df.lazy(), historical_data_zones, location_rarity)
+        df = add_gini_features(df.lazy(), historical_data_zones)
     return df.collect()
 
 
@@ -354,3 +348,43 @@ def add_lagged_features(
             )
 
     return df.with_columns(lag_exprs + diff_exprs)
+
+
+if __name__ == "__main__":
+    df = pl.read_parquet("data/wowah_churn_data.parquet")
+    historical_data = pl.read_parquet("data/wowah_data_raw.parquet")
+    fixed_attr = historical_data.select(pl.col("char", "charclass", "race")).unique()
+
+    df = df.join(fixed_attr, on="char", how="left", maintain_order="left")
+
+    session_encoder = SessionEncoder(
+        split_by="char", timestamp_col="timestamp", session_gap=60 * 30
+    )
+    historical_data = historical_data.with_columns(
+        month=pl.col("timestamp").dt.truncate("1mo")
+    )
+    historical_data = session_encoder.fit_transform(historical_data)
+    historical_data = get_session_duration(historical_data)
+    df = add_general_features(df, historical_data)
+
+    location_rarity = get_zone_rarity(historical_data)
+    # Grouping by character and zone so that I can get the time spent in each zone
+    # Even if users leave the zone, this lets me find how much time a user spends in
+    # a given zone
+    session_encoder_zone = SessionEncoder(
+        split_by=["char", "zone"],
+        timestamp_col="timestamp",
+        session_gap=60 * 30,
+        suffix="zone",
+    )
+    # Zone-session features: a session lasts from the first time a character
+    # enters a zone to the moment it leaves it
+    # This is useful to get zone-specific features
+    historical_data_zone_sessions = session_encoder_zone.fit_transform(historical_data)
+    historical_data_zone_sessions = get_session_duration(historical_data_zone_sessions)
+    df_with_features = add_location_features(
+        df,
+        historical_data_zone_sessions,
+        add_gini=True,
+    )
+    skrub.TableReport(df_with_features.sort("char", "month")).open()
