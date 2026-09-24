@@ -31,6 +31,7 @@ This is the "churn" dataset, which we can then use to train a model.
 import polars as pl
 # %%
 
+
 def make_data(df, interval="1mo"):
     """
     Prepare a dataframe that contains the months in which each player has
@@ -59,14 +60,30 @@ def make_user_month(df, interval="1mo"):
 
     This is done with a cross-product between the unique users and the range of months.
 
+    This function is artificially generating months past the last month in the dataset.
+    This is because we are also adding lagged features with lags of up to 3 months.
+    At train time, we have access to all the information. If we try to predict churn
+    for one of the months we have lagged information for, the model should not crash.
+    It will still be missing the information "for the current month", but the
+    lagged information will be available. 
+    This is more a sanity check than anything else. 
+
     Note that since the months are generated from the range of the dataset, they
     may include months prior to a user's first activity. These will need to be
     filtered out later.
     """
 
     months = pl.datetime_range(
-        start=df.select(pl.col("timestamp").dt.truncate(interval).min()).collect().item(),
-        end=df.select(pl.col("timestamp").dt.truncate(interval).max()).collect().item(),
+        start=df.select(pl.col("timestamp").dt.truncate(interval).min())
+        .collect()
+        .item(),
+        end=df.select(
+            # Adding 3 months to the end of the range because we are adding 
+            # lagged features up to 3 months. 
+            pl.col("timestamp").dt.truncate(interval).max().dt.offset_by("3mo")
+        )
+        .collect()
+        .item(),
         interval=interval,
         closed="both",
         eager=True,
@@ -79,7 +96,6 @@ def make_user_month(df, interval="1mo"):
         .join(months.to_frame(name="month").lazy(), how="cross")
     )
     return char_month
-
 
 
 def add_churn(user_month, data):
@@ -112,7 +128,6 @@ def add_churn(user_month, data):
         )
     )
     return df_with_user_month
-
 
 
 def remove_unrealistic_entries(churn_data, data):
