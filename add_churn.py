@@ -65,8 +65,8 @@ def make_user_month(df, interval="1mo"):
     At train time, we have access to all the information. If we try to predict churn
     for one of the months we have lagged information for, the model should not crash.
     It will still be missing the information "for the current month", but the
-    lagged information will be available. 
-    This is more a sanity check than anything else. 
+    lagged information will be available.
+    This is more a sanity check than anything else.
 
     Note that since the months are generated from the range of the dataset, they
     may include months prior to a user's first activity. These will need to be
@@ -78,8 +78,8 @@ def make_user_month(df, interval="1mo"):
         .collect()
         .item(),
         end=df.select(
-            # Adding 3 months to the end of the range because we are adding 
-            # lagged features up to 3 months. 
+            # Adding 3 months to the end of the range because we are adding
+            # lagged features up to 3 months.
             pl.col("timestamp").dt.truncate(interval).max().dt.offset_by("3mo")
         )
         .collect()
@@ -114,17 +114,25 @@ def add_churn(user_month, data):
             how="left",
         )
         .with_columns(pl.col("has_played").fill_null(False))
-        # Fill missing values in the first_month column with each character's
-        # first month
         .with_columns(first_month=pl.col("first_month").min().over("char"))
-        # Remove (char, month) rows where the month precedes the character's
-        # first month
         .filter(pl.col("first_month") <= pl.col("month"))
         .select(
             "char",
             "month",
             "has_played",
             "first_month",
+        )
+        .sort(["char", "month"])
+        .with_columns(
+            # has_played in the previous month for this character
+            prev_played=pl.col("has_played").shift(1).over("char").fill_null(False)
+        )
+        .with_columns(
+            # churn = absent this month AND absent last month
+            # null on a character's first month is filled with False
+            churn=pl.col("prev_played").is_not_null()
+            & ~pl.col("has_played").fill_null(False)
+            & ~pl.col("prev_played").fill_null(False)
         )
     )
     return df_with_user_month
@@ -146,6 +154,8 @@ def remove_unrealistic_entries(churn_data, data):
             pl.col("char"),
             pl.col("month"),
             pl.col("has_played"),
+            pl.col("prev_played"),
+            pl.col("churn"),
             pl.col("first_month_right").alias("first_month"),
         )
     )
@@ -164,4 +174,5 @@ def build_churn_dataset(historical_data):
 
 if __name__ == "__main__":
     churn_data = build_churn_dataset(pl.scan_parquet("data/wowah_data_raw.parquet"))
+    print(churn_data.head())
     # churn_data.write_parquet("data/wowah_churn_data.parquet")

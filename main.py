@@ -36,8 +36,8 @@ from adding_features import (
 # MIN_DATE = datetime.strptime("2008-01-01", "%Y-%m-%d")
 # MAX_DATE = datetime.strptime("2008-06-30", "%Y-%m-%d")
 # Actual ranges for the full dataset
-MIN_DATE = datetime.strptime("2006-01-01", "%Y-%m-%d")
-MAX_DATE = datetime.strptime("2009-01-10", "%Y-%m-%d")
+MIN_DATE = datetime.strptime("2006-02-01", "%Y-%m-%d")
+MAX_DATE = datetime.strptime("2008-11-01", "%Y-%m-%d")
 
 
 # The splitter iterates over the months and selects all the months up to the
@@ -173,7 +173,8 @@ def build_feature_table(
                 historical_data_zone_sessions,
                 add_gini=add_gini,
             )
-
+        else:
+            df_with_features = df_with_features.collect()
         features_by_month.append(df_with_features)
         assert len(df_with_features) == len(this_month_X)
 
@@ -205,7 +206,7 @@ def load(file, fraction=0.1):
 
 # %%
 def make_data_op(load_fraction=0.1):
-    historical_data_file = skrub.var("historical_data_file")
+    historical_data_file = skrub.var("data_loader", load)
     historical_data = historical_data_file.skb.apply_func(load, fraction=load_fraction)
     # In the original data, "guild == -1" means "no guild", so I'm replacing -1
     # with nulls.
@@ -220,7 +221,7 @@ def make_data_op(load_fraction=0.1):
         build_churn_dataset
     ).skb.set_name("query")
     X = user_month_has_played["char", "month"].skb.mark_as_X(cv=Splitter())
-    y = user_month_has_played["has_played"].skb.mark_as_y()
+    y = user_month_has_played["churn"].skb.mark_as_y()
 
     # Hyperparameters
     session_gap = skrub.choose_from([30, 60, 15], name="session_gap")
@@ -252,29 +253,29 @@ def make_data_op(load_fraction=0.1):
 
 
 def get_env():
-    df = pl.read_parquet("data/wowah_churn_data.parquet")
-    df = sample_by_user(df, fraction=0.1)
     historical_data_file = "data/wowah_data_raw.parquet"
+    uids = pl.read_parquet("data/wowah_churn_data.parquet")["char"].unique().sample(n=10000).to_list()
+    query = get_query(
+        historical_data_file=historical_data_file,
+        uids=uids,
+    )
     return {
-        "query": df,
+        "query": query,
         "historical_data_file": historical_data_file,
-        "local_features": False,
+        "location_features": False,
         "add_gini": True,
     }
 
 
 def cross_validate():
     historical_data_file = "data/wowah_data_all.parquet"
-    results = make_data_op().skb.cross_validate(
-        environment=get_env()
-        # {"historical_data_file": historical_data_file}
-    )
+    results = make_data_op().skb.cross_validate(environment=get_env())
     return results
 
 
 def random_search():
-    df = pl.read_parquet("data/wowah_churn_data.parquet")
-    df = sample_by_user(df, fraction=0.15)
+    # df = pl.read_parquet("data/wowah_churn_data.parquet")
+    # df = sample_by_user(df, fraction=0.15)
     historical_data_file = "data/wowah_data_raw.parquet"
     search = make_data_op().skb.make_randomized_search(
         backend="optuna",
@@ -296,12 +297,18 @@ def evaluate():
     return results, data_op
 
 
+def get_query(historical_data_file, uids):
+    query = build_churn_dataset(pl.scan_parquet(historical_data_file)).filter(
+        pl.col("char").is_in(uids)
+    )
+    return query
+
+
 if __name__ == "__main__":
-    # results, data_op = evaluate()
+    results, data_op = evaluate()
     # data_op.skb.full_report(environment=get_env())
-    results = cross_validate()
-    print(results)
+    # results = cross_validate()
+    # print(results)
 
     # search, env = random_search()
-
     # search.fit(env)
