@@ -96,5 +96,138 @@
     "title": "Pain points simplified by skrub DataOps",
     "section": "Takeaways",
     "text": "Takeaways\n\n\n\nPain point\nskrub DataOps answer\n\n\n\n\nTemporal leakage\nWrangling lives inside the plan, re-run per fold\n\n\nIrregular time CV\nCustom splitter via mark_as_X(cv=...)\n\n\nTuning data choices\nchoose_* inline + Optuna-backed search\n\n\nMany inputs, one artifact\nvar() + one estimator-like DataOp\n\n\nDebugging\nPreviews + full_report() per node\n\n\nBig data\nsubsample() + disk caching\n\n\nAPI freedom\nTransparent Polars access, @deferred for logic\n\n\n\n\nClosing summary: the sessionization example is a good stress test because it combines every hard part of applied ML — temporal structure, custom validation, heavy feature engineering, big data, and tuning of pipeline-level decisions. The skrub DataOps docs position the framework precisely where sklearn Pipeline stops: DAG-shaped, multi-input, leakage-aware, tunable end-to-end, and inspectable. The remaining open question (per-fold vs. precomputed features) is itself made visible by the plan structure rather than hidden in scripts."
+  },
+  {
+    "objectID": "skrub-dataops.html#skrub",
+    "href": "skrub-dataops.html#skrub",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Skrub",
+    "text": "Skrub\nMachine learning on tabular data\n\n\n\nskrub-data.org\nThis talk: the skrub DataOps framework."
+  },
+  {
+    "objectID": "skrub-dataops.html#section",
+    "href": "skrub-dataops.html#section",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "",
+    "text": "Textbook ML\n\n\\(X \\in \\mathbb{R}^{n \\times p},\\ y \\in \\mathbb{R}^n\\)\n\\(\\hat{y} = f_{\\hat{\\theta}}(X)\\)\n\nestimator = TabICLRegressor()\n\ncross_validate(estimator, X, y)\n\nestimator.fit(X_train, y_train)\nestimator.predict(X_new)\n\nData-Science Practice"
+  },
+  {
+    "objectID": "skrub-dataops.html#section-1",
+    "href": "skrub-dataops.html#section-1",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "",
+    "text": "Textbook ML\n\n\\(X \\in \\mathbb{R}^{n \\times p},\\ y \\in \\mathbb{R}^n\\)\n\\(\\hat{y} = f_{\\hat{\\theta}}(X)\\)\n\nestimator = TabICLRegressor()\n\ncross_validate(estimator, X, y)\n\nestimator.fit(X_train, y_train)\nestimator.predict(X_new)\n\nData-Science Practice"
+  },
+  {
+    "objectID": "skrub-dataops.html#section-2",
+    "href": "skrub-dataops.html#section-2",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "",
+    "text": "Textbook ML\n\n\\(X \\in \\mathbb{R}^{n \\times p},\\ y \\in \\mathbb{R}^n\\)\n\\(\\hat{y} = f_{\\hat{\\theta}}(X)\\)\n\nestimator = TabICLRegressor()\n\ncross_validate(estimator, X, y)\n\nestimator.fit(X_train, y_train)\nestimator.predict(X_new)\n\nData-Science Practice"
+  },
+  {
+    "objectID": "skrub-dataops.html#section-3",
+    "href": "skrub-dataops.html#section-3",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "",
+    "text": "Data wrangling: filtering, resampling, aggregations, joins, …\n\nCross-validate without data leaks.\nTune choices with validation scores.\nReplay on new inputs.\n\n\n\n\n\nDataOps\n\n\n\nAll the goodies of the scikit-learn framework: fit() & predict(), cross-validation, hyperparameter tuning, serialization.\nWithout the usual restrictions & while supporting arbitrary data processing. Multiple inputs, feature & target construction, filtering samples, dynamic arguments for CV splitters & scorers, etc.\nAnd more: Optuna integration, dynamic previews, pipeline inspection, …"
+  },
+  {
+    "objectID": "skrub-dataops.html#basic-example",
+    "href": "skrub-dataops.html#basic-example",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Basic example",
+    "text": "Basic example\nDeclare the pipeline\ndata_path = skrub.var(\"data_path\")\ndata = data_path.skb.apply_func(pd.read_csv)\nX = data.drop(columns=\"target\", errors=\"ignore\").skb.mark_as_X()\ny = data[\"target\"].skb.mark_as_y()\npred = X.skb.apply(StandardScaler()).skb.apply(LogisticRegression(), y=y)\nCross-validate\npred.skb.cross_validate({\"data_path\": \"historical_data.csv\"})\nMake a “learner” (object with fit() & predict())\nlearner = pred.skb.make_learner().fit({\"data_path\": \"historical_data.csv\"})\nlearner.predict({\"data_path\": \"new_data.csv\"})\nintro.ipynb"
+  },
+  {
+    "objectID": "skrub-dataops.html#hyperparameter-tuning",
+    "href": "skrub-dataops.html#hyperparameter-tuning",
+    "title": "Skrub DataOps",
+    "section": "Hyperparameter tuning",
+    "text": "Hyperparameter tuning\n\nReplace any value with a choice:\n\n X = data.drop(columns=\"target\", errors=\"ignore\").skb.mark_as_X()\n y = data[\"target\"].skb.mark_as_y()\n pred = X.skb.apply(StandardScaler()).skb.apply(\n-    LogisticRegression(C=1.0),\n+    LogisticRegression(C=skrub.choose_float(0.1, 10.0, log=True)),\n     y=y)\n\nUse grid search or randomized search (possibly backed by Optuna).\n\n-learner = pred.skb.make_learner().fit({...})\n+learner = pred.skb.make_randomized_search().fit({...})\ntuning.ipynb"
+  },
+  {
+    "objectID": "skrub-dataops.html#the-example-world-of-warcraft-avatar-history",
+    "href": "skrub-dataops.html#the-example-world-of-warcraft-avatar-history",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "The example: World of Warcraft Avatar History",
+    "text": "The example: World of Warcraft Avatar History\n\nDataset: WoWAH — ~11M timestamped “heartbeats” (one snapshot every ~10 min, 2006–2009, 91k avatars)\nTask: predict whether a player churns (no activity for two months) in month M+1\nUnit of analysis: the (character, month) pair, built as a cross-product grid\nFeatures: sessionization (SessionEncoder), monthly aggregates, zone-rarity / Gini location features, lag & diff features\nModel: HistGradientBoostingClassifier + TableVectorizer, month-by-month temporal CV\n\nModel optimization is intentionally not the focus of this talk."
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-1-leakage-in-temporal-feature-engineering",
+    "href": "skrub-dataops.html#pain-point-1-leakage-in-temporal-feature-engineering",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Pain point 1 — Leakage in temporal feature engineering",
+    "text": "Pain point 1 — Leakage in temporal feature engineering\n\nFeatures must only use data available at scoring time\nSession detection and aggregations are stateful w.r.t. time: doing them once on the full table leaks the future\nsklearn Pipeline cannot do this: X/y must exist before the pipeline starts, and wrangling lives outside\nskrub docs warn explicitly: aggregation can introduce data leakage → wrap it in the DataOps plan\nIn the example: X and y are cut inside the plan (mark_as_X / mark_as_y), so each CV fold re-runs the feature code on training data only\n\n\nThis is the central difficulty of the example (main.py:90-186). If the target month is April, features may only be built from February data and earlier (main.py:136-143). The skrub sessionization doc (modules/multi_column_operations/sessionization.rst) carries a warning box saying aggregation leaks unless it is re-fit per fold — either wrapped in an sklearn transformer or done “with the skrub Data Ops framework”. DataOps bind the whole wrangling DAG to the prediction, so skb.cross_validate() re-executes the leakage-safe steps inside every fold automatically, instead of the user hand-rolling fold-by-fold feature construction."
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-2-cross-validation-with-irregular-time-splits",
+    "href": "skrub-dataops.html#pain-point-2-cross-validation-with-irregular-time-splits",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Pain point 2 — Cross-validation with irregular time splits",
+    "text": "Pain point 2 — Cross-validation with irregular time splits"
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-2-cross-validation-with-irregular-time-splits-1",
+    "href": "skrub-dataops.html#pain-point-2-cross-validation-with-irregular-time-splits-1",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Pain point 2 — Cross-validation with irregular time splits",
+    "text": "Pain point 2 — Cross-validation with irregular time splits\n\n\n\nOff-the-shelf TimeSeriesSplit assumes folds of equal size\nHere the number of (character, month) rows grows every month — folds are unbalanced by nature"
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-3-tuning-wrangling-choices-not-just-model-knobs",
+    "href": "skrub-dataops.html#pain-point-3-tuning-wrangling-choices-not-just-model-knobs",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Pain point 3 — Tuning wrangling choices, not just model knobs",
+    "text": "Pain point 3 — Tuning wrangling choices, not just model knobs\n\nModel choices are not limited to model hyperparameters: session_gap (15/30/60 min), include location features?, add Gini?, which lags?\nThese are data pipeline decisions, with big performance and runtime impact\nWith DataOps choices can be dropped inline, where the value is used — choose_from, choose_bool, choose_float(log=True)\nOne call to skb.make_randomized_search(backend=\"optuna\", ...) turns the whole DAG into a search"
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-4-one-pipeline-object-many-inputs-deployable",
+    "href": "skrub-dataops.html#pain-point-4-one-pipeline-object-many-inputs-deployable",
+    "title": "Skrub DataOps",
+    "section": "Pain point 4 — One pipeline object, many inputs, deployable",
+    "text": "Pain point 4 — One pipeline object, many inputs, deployable\n\n\n\nMulti-input pipelines are usually scattered across scripts\nInput methods can differ between model setup and production (read from file, fetch an API…)\nWith apply_func, arbitrary Python code can be inserted as graph nodes\nThe final DataOp behaves like one sklearn estimator: .fit(), save, load, skb.eval(env), skb.cross_validate(env)\nProduction: replay the exact trained DAG on new data, no need for glue code\n\n\nimport skrub\n\ndef draft_loader():\n  return pd.read_csv(\"path/to/file.csv\")\n\ndef prod_loader():\n  return api.fetch().to_pandas()\n\nloader = skrub.var(\"loader\", draft_loader, becomes_default=True)\n# build the DAG  \nlearner = data_op.skb.make_learner(fitted=True)\n\n# Use a different loader to get production data\nlearner.predict({\"loader\": prod_loader})\n\n# No changes needed by the learner!"
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-5-debugging-a-complex-dag",
+    "href": "skrub-dataops.html#pain-point-5-debugging-a-complex-dag",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Pain point 5 — Debugging a complex DAG",
+    "text": "Pain point 5 — Debugging a complex DAG\n\nData Ops work lazily: they need to evaluate all nodes in the DAG to run\nEager previews: pass a value to var() and every node shows its result immediately\nskb.report() emits an HTML report: every node’s name, description, predecessors, fitted estimator, and data preview\nOn failure, the report shows the offending node and the traceback"
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-6-big-data-subsampling-and-caching",
+    "href": "skrub-dataops.html#pain-point-6-big-data-subsampling-and-caching",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Pain point 6 — Big data: subsampling and caching",
+    "text": "Pain point 6 — Big data: subsampling and caching\n\n11M rows → interactive development must be fast, but sampling must preserve players’ full trajectories (sample_by_user, not random rows)\nFeature building (build_feature_table) is very expensive — naive re-runs during search would explode cost\nDataOps: skb.subsample() for development is automatically off for real eval / cross_validate runs\nCaching (skrub.set_config(cache=True)) persists expensive node results on disk across trials — changing only learning_rate doesn’t recompute features\nIn-memory reuse is free: the feature_table node is computed once per parameter set and shared (main.py:229-239)"
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-7-stay-in-your-dataframe-api-inside-the-plan",
+    "href": "skrub-dataops.html#pain-point-7-stay-in-your-dataframe-api-inside-the-plan",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Pain point 7 — Stay in your dataframe API inside the plan",
+    "text": "Pain point 7 — Stay in your dataframe API inside the plan\n\nFrameworks usually force you to leave Polars once you enter “pipeline land”\nDataOps are transparent: Polars methods are called directly on DataOps (historical_data.with_columns(...), .collect(), indexing, joins)\nPython control flow (for month in ...) must be put in @deferred / apply_func functions\nDeferred functions appear as one graph node — good for reports and caching"
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-2-cross-validation-with-irregular-time-splits-2",
+    "href": "skrub-dataops.html#pain-point-2-cross-validation-with-irregular-time-splits-2",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Pain point 2 — Cross-validation with irregular time splits",
+    "text": "Pain point 2 — Cross-validation with irregular time splits\n\n\n\nWrite a custom splitter that uses custom dataframe logic to select the samples\nWith DataOps plug it in skb.mark_as_X(cv=Splitter())\nNow, the splitter is honored by cross_validate, train_test_split, randomized search, and scoring\n\n\nclass Splitter:\n    def split(self, user_month, has_played=None, interval=\"1mo\"):\n        time_range = pl.date_range(MIN_DATE, MAX_DATE, interval, eager=True)\n        for split_point in time_range:\n            test_month = pl.Series([split_point]).dt.offset_by(interval).first()\n            train_idx = (\n                user_month.with_row_index(\"idx\")\n                .filter(pl.col(\"month\") &lt;= split_point)[\"idx\"]\n                .to_list()\n            )\n            test_idx = (\n                user_month.with_row_index(\"idx\")\n                .filter(pl.col(\"month\") == test_month)[\"idx\"]\n                .to_list()\n            )\n            if train_idx and test_idx:\n                yield train_idx, test_idx"
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-3-tuning-wrangling-choices-not-just-model-knobs-1",
+    "href": "skrub-dataops.html#pain-point-3-tuning-wrangling-choices-not-just-model-knobs-1",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Pain point 3 — Tuning wrangling choices, not just model knobs",
+    "text": "Pain point 3 — Tuning wrangling choices, not just model knobs\n\nReplace any value with a choice:\n\n X = data.drop(columns=\"target\", errors=\"ignore\").skb.mark_as_X()\n y = data[\"target\"].skb.mark_as_y()\n pred = X.skb.apply(StandardScaler()).skb.apply(\n-    LogisticRegression(C=1.0),\n+    LogisticRegression(C=skrub.choose_float(0.1, 10.0, log=True)),\n     y=y)\n\nUse grid search or randomized search (possibly backed by Optuna).\n\n-learner = pred.skb.make_learner().fit({...})\n+learner = pred.skb.make_randomized_search().fit({...})\n\nTune data pipeline decisions, not only hyperparameters\n\nX_enc = X.skb.apply_func(build_features,\n+  additional_features=skrub.choose_bool()\n )\n pred = X.skb.apply(LogisticRegression())"
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-4-one-pipeline-object-many-inputs",
+    "href": "skrub-dataops.html#pain-point-4-one-pipeline-object-many-inputs",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Pain point 4 — One pipeline object, many inputs",
+    "text": "Pain point 4 — One pipeline object, many inputs\n\n\n\nMulti-input pipelines are usually scattered across scripts\nInput methods can differ between model setup and production (read from file, fetch an API…)\nThe final DataOp behaves like one sklearn estimator: .fit(), save, load, skb.eval(env), skb.cross_validate(env)\nProduction: replay the exact trained DAG on new data, no need for glue code\n\n\nimport skrub\n\ndef draft_loader():\n  return pd.read_csv(\"path/to/file.csv\")\n\ndef prod_loader():\n  return api.fetch().to_pandas()\n\nloader = skrub.var(\"loader\", draft_loader, becomes_default=True)\n# build the DAG  \nlearner = data_op.skb.make_learner(fitted=True)\n\n# Use a different loader to get production data\nlearner.predict({\"loader\": prod_loader})\n\n# No changes needed by the learner!"
   }
 ]
