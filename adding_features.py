@@ -208,7 +208,7 @@ def gini(group: pl.DataFrame):
     sorted = (
         group.sort("session_duration")
         .with_columns(
-            cumulative=pl.col("session_duration").dt.total_minutes().cum_sum()
+            cumulative=pl.col("session_duration").fill_null(0).dt.total_minutes().cum_sum()
         )
         .with_columns(
             gini=(n + 1 - 2 * pl.col("cumulative").sum() / pl.col("cumulative").last())

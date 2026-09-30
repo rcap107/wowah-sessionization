@@ -97,16 +97,15 @@ def build_feature_table(
 ):
     features_by_month = []
 
-    # Create a session encoder with a 30 minute timeout
+    # Create a session encoder. The gap is a hyperparameter that can be tuned.
     # This encoder is used as a stateless transformer so it is refitted for every
     # month
     session_encoder = SessionEncoder(
-        split_by="char", timestamp_col="timestamp", session_gap=session_gap
+        split_by="char", timestamp_col="timestamp", session_gap=session_gap * 60
     )
     historical_data = historical_data.with_columns(
         month=pl.col("timestamp").dt.truncate(interval)
     ).lazy()
-
 
     # Every (char, month) pair a character could appear in, whether or not they
     # played that month: the full grid lag/diff features are built over.
@@ -120,7 +119,7 @@ def build_feature_table(
         maintain_order="left",
     ).collect()
 
-    # This is used to add the historical data up to the given month
+    # This is used to add the historical data up to the given month.
     # Sorting months is not needed, but forces a consistent order (better for debugging)
     for month in user_month["month"].unique().sort():
         this_month_X = filter_df_by_month(user_month, month)
@@ -141,9 +140,7 @@ def build_feature_table(
         historical_data_sessions = session_encoder.fit_transform(
             kept_historical_data.collect()
         ).lazy()
-        historical_data_sessions = get_session_duration(
-            historical_data_sessions
-        )
+        historical_data_sessions = get_session_duration(historical_data_sessions)
 
         # General features: add session based and playerbase features
         df_with_features = add_general_features(
@@ -156,7 +153,10 @@ def build_feature_table(
             # Even if users leave the zone, this lets me find how much time a user spends in
             # a given zone
             session_encoder_zone = SessionEncoder(
-                split_by=["char", "zone"], timestamp_col="timestamp", session_gap=session_gap, suffix="session_id_zone"
+                split_by=["char", "zone"],
+                timestamp_col="timestamp",
+                session_gap=session_gap * 60,
+                suffix="session_id_zone",
             )
             # Zone-session features: a session lasts from the first time a character
             # enters a zone to the moment it leaves it
@@ -165,7 +165,8 @@ def build_feature_table(
                 kept_historical_data.collect()
             ).lazy()
             historical_data_zone_sessions = get_session_duration(
-                historical_data_zone_sessions, session_column="timestamp_session_id_zone"
+                historical_data_zone_sessions,
+                session_column="timestamp_session_id_zone",
             )
             df_with_features = add_location_features(
                 df_with_features,
@@ -203,9 +204,9 @@ def load(file, fraction=0.1):
 
 
 # %%
-def make_data_op():
+def make_data_op(load_fraction=0.1):
     historical_data_file = skrub.var("historical_data_file")
-    historical_data = historical_data_file.skb.apply_func(load, fraction=0.01)
+    historical_data = historical_data_file.skb.apply_func(load, fraction=load_fraction)
     # In the original data, "guild == -1" means "no guild", so I'm replacing -1
     # with nulls.
     historical_data = historical_data.with_columns(
@@ -224,7 +225,6 @@ def make_data_op():
     # Hyperparameters
     session_gap = skrub.choose_from([30, 60, 15], name="session_gap")
     use_location = skrub.choose_bool(name="location_features")
-    add_gini = skrub.choose_bool(name="add_gini")
     lags = skrub.choose_from(
         {"no": None, "1": (1,), "1_2": (1, 2), "1_2_3": (1, 2, 3)}, name="lags"
     )
@@ -236,7 +236,7 @@ def make_data_op():
         build_feature_table,
         session_gap=session_gap,
         use_location=use_location,
-        add_gini=add_gini,
+        add_gini=True,
         lags=lags,
     )
     all_features = X.skb.apply_func(add_features, feature_table)
@@ -255,13 +255,19 @@ def get_env():
     df = pl.read_parquet("data/wowah_churn_data.parquet")
     df = sample_by_user(df, fraction=0.1)
     historical_data_file = "data/wowah_data_raw.parquet"
-    return {"query": df, "historical_data_file": historical_data_file}
+    return {
+        "query": df,
+        "historical_data_file": historical_data_file,
+        "local_features": False,
+        "add_gini": True,
+    }
 
 
 def cross_validate():
     historical_data_file = "data/wowah_data_all.parquet"
     results = make_data_op().skb.cross_validate(
-        {"historical_data_file": historical_data_file}
+        environment=get_env()
+        # {"historical_data_file": historical_data_file}
     )
     return results
 
@@ -274,7 +280,7 @@ def random_search():
         backend="optuna",
         n_jobs=-1,
         n_iter=16,
-        study_name="wowah_churn_study",
+        # study_name="wowah_churn_study",
         storage="sqlite:///wowah_churn_study.db",
     )
     env = {"historical_data_file": historical_data_file}
@@ -285,15 +291,17 @@ def random_search():
 def evaluate():
     historical_data_file = "data/wowah_data_raw.parquet"
     data_op = make_data_op()
-    results = data_op.skb.eval({"historical_data_file": historical_data_file})
+    env = get_env()
+    results = data_op.skb.eval(env)
     return results, data_op
 
 
 if __name__ == "__main__":
     # results, data_op = evaluate()
-    # results = cross_validate()
-    # print(results)
+    # data_op.skb.full_report(environment=get_env())
+    results = cross_validate()
+    print(results)
 
-    search, env = random_search()
+    # search, env = random_search()
 
-    search.fit(env)
+    # search.fit(env)
