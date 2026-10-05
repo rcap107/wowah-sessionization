@@ -143,7 +143,13 @@ estimator.predict(X_new)</code></pre>
 - And more: Optuna integration, dynamic previews, pipeline inspection, ...
 :::
 
-## Basic example {.smaller}
+## Basic example {.smaller auto-animate="true"}
+
+
+::: {.columns}
+
+::: {.column width=60%}
+
 
 Declare the pipeline
 
@@ -168,9 +174,18 @@ learner = pred.skb.make_learner().fit({"data_path": "historical_data.csv"})
 learner.predict({"data_path": "new_data.csv"})
 ```
 
-<a href="http://localhost:8888/notebooks/intro/intro.ipynb" target="_blank">intro.ipynb</a>
 
-##
+:::
+
+::: {.column width=40%}
+
+![](images/base_ex.svg)
+
+:::
+
+:::
+
+## Basic example {auto-animate="true"}
 
 ![](images/learner-schema/make_learner.svg)
 
@@ -240,24 +255,20 @@ This is the central difficulty of the example (`main.py:90-186`). If the target 
 ::: {.column width=60%}
 
 
-```{.python code-line-numbers="|6-15"}
+```{.python}
 class Splitter:
-    def split(self, user_month, has_played=None, interval="1mo"):
-        time_range = pl.date_range(MIN_DATE, MAX_DATE, interval, eager=True)
-        for split_point in time_range:
-            test_month = pl.Series([split_point]).dt.offset_by(interval).first()
+    def split(self, X, y=None):
+        ...
+        for split_point in ...:
+            test_month = pl.Series([split_point]).dt.offset_by("1mo").first()
             train_idx = (
-                user_month.with_row_index("idx")
+                X.with_row_index("idx")
                 .filter(pl.col("month") <= split_point)["idx"]
-                .to_list()
             )
             test_idx = (
-                user_month.with_row_index("idx")
+                X.with_row_index("idx")
                 .filter(pl.col("month") == test_month)["idx"]
-                .to_list()
             )
-            if train_idx and test_idx:
-                yield train_idx, test_idx
 ```
 
 :::
