@@ -42,6 +42,7 @@ solve-group = "default"
 
 [environments.docs.dependencies]
 quarto = "*"
+jupyter-cache = "*"
 
 [tasks]
 # Build and print the user-month churn table from data/wowah_data_2008.parquet

@@ -51,15 +51,18 @@ DATASETS = {
 DEFAULT_DATASET = "2008"
 
 
-# The splitter iterates over the months. For each split point, the test month is
-# the following month: it is the month during which we would score users and act
-# on the ones marked as "churn risks".
-#
-# The target of a row (churn_next) is the churn status of the month after it, so
-# it is only known one month later. The training set therefore stops one month
-# before the split point: a row from the split point month would have a target
-# computed from the test month.
 class Splitter:
+    """
+    Iterates over the months. For each split point, the test month is the
+    following month: it is the month during which we would score users and act
+    on the ones marked as "churn risks".
+
+    The target of a row (churn_next) is the churn status of the month after it,
+    so it is only known one month later. The training set therefore stops one
+    month before the split point: a row from the split point month would have a
+    target computed from the test month.
+    """
+
     def split(self, user_month, has_played=None, interval="1mo"):
         # the target is not needed in this splitter since we are only splitting
         # based on the month
@@ -96,14 +99,6 @@ def filter_df_by_month(df, month):
 
 
 # %%
-# This function is needed to make sure that we are only ever using historical data
-# up to the given month - 1 month. This is to avoid any leakage in the data.
-#
-# It builds the feature table for every (char, month) pair a character could
-# appear in (not just the rows asked for by a given CV fold), because lagged
-# features need each character's full monthly timeline: a CV fold's X may
-# contain a single month (e.g. the test fold), which would otherwise leave
-# every lag/diff column null.
 def build_feature_table(
     historical_data,
     session_gap=30,
@@ -112,6 +107,18 @@ def build_feature_table(
     interval="1mo",
     lags=(1, 2),
 ):
+    """
+    Build the feature table for every (char, month) pair.
+
+    This function makes sure that we are only ever using historical data up to
+    the given month - 1 month. This is to avoid any leakage in the data.
+
+    It builds the table for every (char, month) pair a character could appear
+    in (not just the rows asked for by a given CV fold), because lagged
+    features need each character's full monthly timeline: a CV fold's X may
+    contain a single month (e.g. the test fold), which would otherwise leave
+    every lag/diff column null.
+    """
     features_by_month = []
 
     # Create a session encoder. The gap is a hyperparameter that can be tuned.

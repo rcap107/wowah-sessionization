@@ -188,8 +188,13 @@ Cell-style scripts (`# %%`), run from the repository root:
 
 ## Documents
 
-- `draft.qmd`: blog post about the pipeline. It describes an **earlier version**: the target
-  is `has_played` and features come from `M - 2`.
+- `draft.qmd`: blog post about the pipeline, in sync with the current code (target
+  `churn_next`, features from `M - 1`, splitter with a one-month gap). It does not copy any
+  code: a hidden helper (`show`) prints the source of the functions imported from `add_churn.py`
+  and `main.py` with `inspect.getsource`, so the code shown is the code that runs. For this
+  to work, the functions need their explanations in docstrings rather than in comments above
+  the `def`. The post renders successfully (checked in a temporary copy), but `docs/` and `_freeze/`
+  still contain the previous render. It stops after a first cross-validation run.
 - `skrub-dataops.qmd`, `pain_points.qmd`: reveal.js slides on the DataOps pain points
   (leakage, irregular CV, tuning wrangling choices, one deployable learner, debugging, subsampling,
   staying in the dataframe API).
@@ -215,7 +220,8 @@ then scores are mostly 0.8 to 0.9, with a range of 0.65 to 0.92 (the lowest are 
 folds, around the 11th and 12th test months).
 
 The first folds have very little training data (a few months of a growing playerbase), which
-explains the near-chance scores. These numbers are a sanity check, not a tuned benchmark.
+explains the near-chance scores. These numbers are a sanity check, not a tuned benchmark, and
+they change by a few hundredths between runs.
 `wowah_churn_study.db` contains Optuna runs from earlier searches; they predate the
 `churn_next` target, so their scores are not comparable with the table above.
 
