@@ -6,21 +6,27 @@
 <script src="site_libs/quarto-html/tippy.umd.min.js"></script>
 <link href="site_libs/quarto-html/tippy.css" rel="stylesheet">
 <link href="site_libs/quarto-html/light-border.css" rel="stylesheet">
-<link href="site_libs/quarto-html/quarto-syntax-highlighting-7b89279ff1a6dce999919e0e67d4d9ec.css" rel="stylesheet" id="quarto-text-highlighting-styles"><meta charset="utf-8">
-  <meta name="generator" content="quarto-1.8.25">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting-63b5708e65d6cd79cd7618c58d0c21e7.css" rel="stylesheet" id="quarto-text-highlighting-styles"><meta charset="utf-8">
+  <meta name="generator" content="quarto-1.11.9">
 
   <meta name="author" content="Riccardo Cappuzzo, Jérôme Dockès">
   <title>WoWAH Player Churn Prediction – Skrub Data Ops: an application to player churn</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, minimal-ui">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" href="site_libs/revealjs/dist/reset.css">
   <link rel="stylesheet" href="site_libs/revealjs/dist/reveal.css">
   <style>
-    code{white-space: pre-wrap;}
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: min(4vw, 1.5em);}
-    div.column{flex: auto; overflow-x: auto;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     ul.task-list{list-style: none;}
     ul.task-list li input[type="checkbox"] {
@@ -95,7 +101,7 @@
     code span.vs { color: #20794d; } /* VerbatimString */
     code span.wa { color: #5e5e5e; font-style: italic; } /* Warning */
   </style>
-  <link rel="stylesheet" href="site_libs/revealjs/dist/theme/quarto-534cd8e3a96973385dffff3f4709048d.css">
+  <link rel="stylesheet" href="site_libs/revealjs/dist/theme/quarto-00ad5a49dff614330cd349bcec985ec3.css">
   <link href="site_libs/revealjs/plugin/quarto-line-highlight/line-highlight.css" rel="stylesheet">
   <link href="site_libs/revealjs/plugin/reveal-menu/menu.css" rel="stylesheet">
   <link href="site_libs/revealjs/plugin/reveal-menu/quarto-menu.css" rel="stylesheet">
@@ -317,6 +323,9 @@ estimator.predict(X_new)</code></pre>
 <h2 data-id="quarto-animate-title">Basic example</h2>
 
 <img data-src="images/learner-schema/make_learner.svg" class="r-stretch"></section>
+<section id="in-summary-why-data-ops" class="slide level2">
+<h2>In summary, why Data Ops?</h2>
+</section>
 <section id="the-example-world-of-warcraft-avatar-history" class="slide level2 smaller">
 <h2>The example: World of Warcraft Avatar History</h2>
 <ul>
@@ -326,7 +335,19 @@ estimator.predict(X_new)</code></pre>
 <li><strong>Features</strong>: sessionization (<code>SessionEncoder</code>), monthly aggregates, zone-rarity / Gini location features, lag &amp; diff features</li>
 <li><strong>Model</strong>: <code>HistGradientBoostingClassifier</code> + <code>TableVectorizer</code>, month-by-month temporal CV</li>
 </ul>
+<div class="callout callout-important callout-titled callout-style-default">
+<div class="callout-body">
+<div class="callout-title">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<p><strong>Important</strong></p>
+</div>
+<div class="callout-content">
 <p>Model optimization is <em>intentionally</em> not the focus of this talk.</p>
+</div>
+</div>
+</div>
 </section>
 <section id="pain-point-1-leakage-in-temporal-feature-engineering" class="slide level2 smaller">
 <h2>Pain point 1 — Leakage in temporal feature engineering</h2>
@@ -436,22 +457,22 @@ estimator.predict(X_new)</code></pre>
 <li>Production: replay the <em>exact</em> trained DAG on new data, no need for glue code</li>
 </ul>
 </div><div class="column">
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5" data-code-line-numbers="|3-4,9-11|6-7,13-14"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a></a><span class="im">import</span> skrub</span>
-<span id="cb5-2"><a></a></span>
-<span id="cb5-3"><a></a><span class="kw">def</span> draft_loader():</span>
-<span id="cb5-4"><a></a>  <span class="cf">return</span> pd.read_csv(<span class="st">"path/to/file.csv"</span>)</span>
-<span id="cb5-5"><a></a></span>
-<span id="cb5-6"><a></a><span class="kw">def</span> prod_loader():</span>
-<span id="cb5-7"><a></a>  <span class="cf">return</span> api.fetch().to_pandas()</span>
-<span id="cb5-8"><a></a></span>
-<span id="cb5-9"><a></a>loader <span class="op">=</span> skrub.var(<span class="st">"loader"</span>, draft_loader, becomes_default<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb5-10"><a></a><span class="co"># build the DAG  </span></span>
-<span id="cb5-11"><a></a>learner <span class="op">=</span> data_op.skb.make_learner(fitted<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb5-12"><a></a></span>
-<span id="cb5-13"><a></a><span class="co"># Use a different loader to get production data</span></span>
-<span id="cb5-14"><a></a>learner.predict({<span class="st">"loader"</span>: prod_loader})</span>
-<span id="cb5-15"><a></a></span>
-<span id="cb5-16"><a></a><span class="co"># No changes needed by the learner!</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5" data-code-line-numbers="|3-4,9-11|6-7,13-14"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a aria-label="1"></a><span class="im">import</span> skrub</span>
+<span id="cb5-2"><a aria-label="2"></a></span>
+<span id="cb5-3"><a aria-label="3"></a><span class="kw">def</span> draft_loader():</span>
+<span id="cb5-4"><a aria-label="4"></a>  <span class="cf">return</span> pd.read_csv(<span class="st">"path/to/file.csv"</span>)</span>
+<span id="cb5-5"><a aria-label="5"></a></span>
+<span id="cb5-6"><a aria-label="6"></a><span class="kw">def</span> prod_loader():</span>
+<span id="cb5-7"><a aria-label="7"></a>  <span class="cf">return</span> api.fetch().to_pandas()</span>
+<span id="cb5-8"><a aria-label="8"></a></span>
+<span id="cb5-9"><a aria-label="9"></a>loader <span class="op">=</span> skrub.var(<span class="st">"loader"</span>, draft_loader, becomes_default<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb5-10"><a aria-label="10"></a><span class="co"># build the DAG  </span></span>
+<span id="cb5-11"><a aria-label="11"></a>learner <span class="op">=</span> data_op.skb.make_learner(fitted<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb5-12"><a aria-label="12"></a></span>
+<span id="cb5-13"><a aria-label="13"></a><span class="co"># Use a different loader to get production data</span></span>
+<span id="cb5-14"><a aria-label="14"></a>learner.predict({<span class="st">"loader"</span>: prod_loader})</span>
+<span id="cb5-15"><a aria-label="15"></a></span>
+<span id="cb5-16"><a aria-label="16"></a><span class="co"># No changes needed by the learner!</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div></div>
 </section>
 <section id="pain-point-5-debugging-a-complex-dag" class="slide level2">
@@ -461,16 +482,6 @@ estimator.predict(X_new)</code></pre>
 <li>Eager <strong>previews</strong>: pass a value to <code>var()</code> and every node shows its result immediately</li>
 <li><code>skb.report()</code> emits an HTML report: every node’s name, description, predecessors, fitted estimator, and <strong>data preview</strong></li>
 <li>On failure, the report shows the offending node and the traceback</li>
-</ul>
-</section>
-<section id="pain-point-6-big-data-subsampling-and-caching" class="slide level2 smaller">
-<h2>Pain point 6 — Big data: subsampling and caching</h2>
-<ul>
-<li>11M rows → interactive development must be fast, but <strong>sampling must preserve players’ full trajectories</strong> (<code>sample_by_user</code>, not random rows)</li>
-<li>Feature building (<code>build_feature_table</code>) is <strong>very expensive</strong> — naive re-runs during search would explode cost</li>
-<li>DataOps: <code>skb.subsample()</code> for development is <strong>automatically off</strong> for real <code>eval</code> / <code>cross_validate</code> runs</li>
-<li>Caching (<code>skrub.set_config(cache=True)</code>) persists expensive node results on disk <strong>across trials</strong> — changing only <code>learning_rate</code> doesn’t recompute features</li>
-<li>In-memory reuse is free: the <code>feature_table</code> node is computed once per parameter set and shared (<code>main.py:229-239</code>)</li>
 </ul>
 </section>
 <section id="pain-point-7-stay-in-your-dataframe-api-inside-the-plan" class="slide level2 smaller">
@@ -519,7 +530,7 @@ estimator.predict(X_new)</code></pre>
 'autoAnimateDuration': 1,
 'autoAnimateUnmatched': true,
 'jumpToSlide': true,
-'menu': {"side":"left","useTextContentForMissingTitles":true,"markers":false,"loadIcons":false,"custom":[{"title":"Tools","icon":"<i class=\"fas fa-gear\"></i>","content":"<ul class=\"slide-menu-items\">\n<li class=\"slide-tool-item active\" data-item=\"0\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.fullscreen(event)\"><kbd>f</kbd> Fullscreen</a></li>\n<li class=\"slide-tool-item\" data-item=\"1\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.speakerMode(event)\"><kbd>s</kbd> Speaker View</a></li>\n<li class=\"slide-tool-item\" data-item=\"2\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.overview(event)\"><kbd>o</kbd> Slide Overview</a></li>\n<li class=\"slide-tool-item\" data-item=\"3\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.togglePdfExport(event)\"><kbd>e</kbd> PDF Export Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"4\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.toggleScrollView(event)\"><kbd>r</kbd> Scroll View Mode</a></li>\n<li class=\"slide-tool-item\" data-item=\"5\"><a href=\"#\" onclick=\"RevealMenuToolHandlers.keyboardHelp(event)\"><kbd>?</kbd> Keyboard Help</a></li>\n</ul>"}],"openButton":true},
+'menu': {"side":"left","useTextContentForMissingTitles":true,"markers":false,"loadIcons":false,"custom":[{"title":"Tools","icon":"\u003ci class=\"fas fa-gear\">\u003c/i>","content":"\u003cul class=\"slide-menu-items\">\n\u003cli class=\"slide-tool-item active\" data-item=\"0\">\u003ca href=\"#\" onclick=\"RevealMenuToolHandlers.fullscreen(event)\">\u003ckbd>f\u003c/kbd> Fullscreen\u003c/a>\u003c/li>\n\u003cli class=\"slide-tool-item\" data-item=\"1\">\u003ca href=\"#\" onclick=\"RevealMenuToolHandlers.speakerMode(event)\">\u003ckbd>s\u003c/kbd> Speaker View\u003c/a>\u003c/li>\n\u003cli class=\"slide-tool-item\" data-item=\"2\">\u003ca href=\"#\" onclick=\"RevealMenuToolHandlers.overview(event)\">\u003ckbd>o\u003c/kbd> Slide Overview\u003c/a>\u003c/li>\n\u003cli class=\"slide-tool-item\" data-item=\"3\">\u003ca href=\"#\" onclick=\"RevealMenuToolHandlers.togglePdfExport(event)\">\u003ckbd>e\u003c/kbd> PDF Export Mode\u003c/a>\u003c/li>\n\u003cli class=\"slide-tool-item\" data-item=\"4\">\u003ca href=\"#\" onclick=\"RevealMenuToolHandlers.toggleScrollView(event)\">\u003ckbd>r\u003c/kbd> Scroll View Mode\u003c/a>\u003c/li>\n\u003cli class=\"slide-tool-item\" data-item=\"5\">\u003ca href=\"#\" onclick=\"RevealMenuToolHandlers.keyboardHelp(event)\">\u003ckbd>?\u003c/kbd> Keyboard Help\u003c/a>\u003c/li>\n\u003c/ul>"}],"openButton":true,"openButtonLabel":"Slide menu"},
 'smaller': false,
  
         // Display controls in the bottom right corner
@@ -774,7 +785,8 @@ estimator.predict(X_new)</code></pre>
               return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
           }
           // Inspect non-navigation links and adorn them if external
-         var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+          window.quartoDecorateExternalLinks = function (root) {
+         var links = (root || window.document).querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
           for (var i=0; i<links.length; i++) {
             const link = links[i];
             if (!isInternal(link.href)) {
@@ -783,8 +795,69 @@ estimator.predict(X_new)</code></pre>
               if (link.dataset.originalHref !== undefined) {
                 link.href = link.dataset.originalHref;
               }
+              if (!link.classList.contains('no-external-icon')) {
+              }
             }
           }
+          };
+          window.quartoDecorateExternalLinks(window.document);
+        // Esc closes the popup (WCAG 1.4.13) and focus leaving both trigger and
+        // popup closes it (WCAG 2.4.11); tippy handles neither for interactive popups.
+        const hideOnEscAndFocusOut = {
+          name: 'hideOnEscAndFocusOut',
+          defaultValue: true,
+          fn(instance) {
+            const dismiss = () => {
+              // A show scheduled by the trigger delay would otherwise reopen it
+              instance.clearDelayTimeouts();
+              instance.hide();
+            };
+            const onKeyDown = (event) => {
+              if (event.key !== 'Escape') {
+                return;
+              }
+              // Keep Esc from also reaching page handlers (e.g. reveal.js overview),
+              // except an open reveal.js slide menu, which Esc should close too.
+              // The menu handles keys only when its keyboard option is on.
+              const menuHandlesEsc = window.Reveal?.getPlugin?.('menu')?.isOpen() &&
+                window.Reveal.getConfig().menu?.keyboard !== false;
+              if (!menuHandlesEsc) {
+                event.stopPropagation();
+              }
+              if (instance.popper.contains(window.document.activeElement)) {
+                // Disabled while refocusing so the focus trigger does not reopen it
+                instance.disable();
+                instance.reference.focus();
+                instance.enable();
+              }
+              dismiss();
+            };
+            const onFocusOut = (event) => {
+              const target = event.relatedTarget;
+              if (target && !instance.reference.contains(target) &&
+                  !instance.popper.contains(target)) {
+                dismiss();
+              }
+            };
+            // On the trigger too: a click trigger (code-annotations: select) has no
+            // blur handling. Attached for the instance's lifetime so leaving the
+            // trigger also cancels a show still pending on the trigger delay.
+            instance.reference.addEventListener('focusout', onFocusOut);
+            return {
+              onShow() {
+                window.document.addEventListener('keydown', onKeyDown, true);
+                instance.popper.addEventListener('focusout', onFocusOut);
+              },
+              onHide() {
+                window.document.removeEventListener('keydown', onKeyDown, true);
+                instance.popper.removeEventListener('focusout', onFocusOut);
+              },
+              onDestroy() {
+                instance.reference.removeEventListener('focusout', onFocusOut);
+              },
+            };
+          },
+        };
         function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
           const config = {
             allowHTML: true,
@@ -798,6 +871,7 @@ estimator.predict(X_new)</code></pre>
             interactiveBorder: 10,
             theme: 'light-border',
             placement: 'bottom-start',
+            plugins: [hideOnEscAndFocusOut],
           };
           if (contentFn) {
             config.content = contentFn;
