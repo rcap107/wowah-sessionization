@@ -24,7 +24,6 @@ pydot = "*"
 
 # Only needed to re-render the .qmd files (blog post and slides)
 [feature.docs.dependencies]
-quarto = "*"
 jupyter = "*"
 ipykernel = "*"
 nbformat = "*"
@@ -36,7 +35,13 @@ PYTHONPATH = "$PIXI_PROJECT_ROOT"
 
 [environments]
 default = { solve-group = "default" }
-docs = { features = ["docs"], solve-group = "default" }
+
+[environments.docs]
+features = ["docs"]
+solve-group = "default"
+
+[environments.docs.dependencies]
+quarto = "*"
 
 [tasks]
 # Build and print the user-month churn table from data/wowah_data_2008.parquet
