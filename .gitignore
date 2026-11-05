@@ -11,3 +11,5 @@ data/
 __pycache__/
 /.quarto/
 **/*.quarto_ipynb
+
+**/.DS_Store
