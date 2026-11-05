@@ -1,0 +1,31 @@
+digraph G {
+rankdir=TB;
+ranksep=0.4;
+node_0 [shape=box, fontsize=10, height=0.25, margin="0.08,0.06", labelloc=c, fontname="sans-serif", color=black, label="Var &#x27;historical_data_file&#x27;", tooltip="      File &quot;/Users/rcap/work/sessionization/main.py&quot;, line 209, in make_data_op\n        historical_data_file = skrub.var(&quot;historical_data_file&quot;)", peripheries=2, id="node_0"];
+node_1 [shape=box, fontsize=10, height=0.25, margin="0.08,0.06", labelloc=c, fontname="sans-serif", color=black, label="Call &#x27;load&#x27;", tooltip="      File &quot;/Users/rcap/work/sessionization/main.py&quot;, line 210, in make_data_op\n        historical_data = historical_data_file.skb.apply_func(load, fraction=load_fraction)", id="node_1"];
+node_2 [shape=box, fontsize=10, height=0.25, margin="0.08,0.06", labelloc=c, fontname="sans-serif", color=black, label="CallMethod &#x27;with_columns&#x27;", tooltip="      File &quot;/Users/rcap/work/sessionization/main.py&quot;, line 213, in make_data_op\n        historical_data = historical_data.with_columns(", id="node_2"];
+node_3 [shape=box, fontsize=10, height=0.25, margin="0.08,0.06", labelloc=c, fontname="sans-serif", color=black, label="query | Call &#x27;build_churn_dataset&#x27;", tooltip="      File &quot;/Users/rcap/work/sessionization/main.py&quot;, line 220, in make_data_op\n        user_month_has_played = historical_data.skb.apply_func(", id="node_3"];
+node_4 [shape=box, fontsize=10, height=0.25, margin="0.08,0.06", labelloc=c, fontname="sans-serif", color=black, label="GetItem (&#x27;char&#x27;, &#x27;month&#x27;)", tooltip="      File &quot;/Users/rcap/work/sessionization/main.py&quot;, line 223, in make_data_op\n        X = user_month_has_played[&quot;char&quot;, &quot;month&quot;].skb.mark_as_X(cv=Splitter())", id="node_4"];
+node_5 [shape=box, fontsize=10, height=0.25, margin="0.08,0.06", labelloc=c, fontname="sans-serif", color=black, style=filled, fillcolor="#c6d5f0", label=X, tooltip="      File &quot;/Users/rcap/work/sessionization/main.py&quot;, line 223, in make_data_op\n        X = user_month_has_played[&quot;char&quot;, &quot;month&quot;].skb.mark_as_X(cv=Splitter())", id="node_5"];
+node_6 [shape=box, fontsize=10, height=0.25, margin="0.08,0.06", labelloc=c, fontname="sans-serif", color=black, label="CallMethod &#x27;collect&#x27;", tooltip="      File &quot;/Users/rcap/work/sessionization/main.py&quot;, line 236, in make_data_op\n        feature_table = historical_data.collect().skb.apply_func(", id="node_6"];
+node_7 [shape=box, fontsize=10, height=0.25, margin="0.08,0.06", labelloc=c, fontname="sans-serif", color=black, label="Call &#x27;build_feature_table&#x27;", tooltip="      File &quot;/Users/rcap/work/sessionization/main.py&quot;, line 236, in make_data_op\n        feature_table = historical_data.collect().skb.apply_func(", id="node_7"];
+node_8 [shape=box, fontsize=10, height=0.25, margin="0.08,0.06", labelloc=c, fontname="sans-serif", color=black, label="Call &#x27;add_features&#x27;", tooltip="      File &quot;/Users/rcap/work/sessionization/main.py&quot;, line 243, in make_data_op\n        all_features = X.skb.apply_func(add_features, feature_table)", id="node_8"];
+node_9 [shape=box, fontsize=10, height=0.25, margin="0.08,0.06", labelloc=c, fontname="sans-serif", color=black, label="Apply TableVectorizer", tooltip="      File &quot;/Users/rcap/work/sessionization/main.py&quot;, line 244, in make_data_op\n        encoded = all_features.skb.apply(skrub.TableVectorizer())", id="node_9"];
+node_10 [shape=box, fontsize=10, height=0.25, margin="0.08,0.06", labelloc=c, fontname="sans-serif", color=black, style=filled, fillcolor="#fad9c6", label="y: GetItem &#x27;churn&#x27;", tooltip="      File &quot;/Users/rcap/work/sessionization/main.py&quot;, line 224, in make_data_op\n        y = user_month_has_played[&quot;churn&quot;].skb.mark_as_y()", id="node_10"];
+node_11 [shape=box, fontsize=10, height=0.25, margin="0.08,0.06", labelloc=c, fontname="sans-serif", color=black, label="Apply HistGradientBoostingClassifier", tooltip="      File &quot;/Users/rcap/work/sessionization/main.py&quot;, line 245, in make_data_op\n        data_op = encoded.skb.apply(", id="node_11"];
+node_12 [shape=box, fontsize=10, height=0.25, margin="0.08,0.06", labelloc=c, fontname="sans-serif", color=black, label="Scoring &lt;Apply HistGradientBoostingClassifier&gt; (1 scorers)", tooltip="      File &quot;/Users/rcap/work/sessionization/main.py&quot;, line 247, in make_data_op\n        ).skb.with_scoring(&quot;roc_auc&quot;)", id="node_12"];
+node_11 -> node_12 [arrowsize=0.7];
+node_9 -> node_11 [arrowsize=0.7];
+node_10 -> node_11 [arrowsize=0.7];
+node_8 -> node_9 [arrowsize=0.7];
+node_5 -> node_8 [arrowsize=0.7];
+node_7 -> node_8 [arrowsize=0.7];
+node_4 -> node_5 [arrowsize=0.7];
+node_3 -> node_4 [arrowsize=0.7];
+node_2 -> node_3 [arrowsize=0.7];
+node_1 -> node_2 [arrowsize=0.7];
+node_0 -> node_1 [arrowsize=0.7];
+node_6 -> node_7 [arrowsize=0.7];
+node_2 -> node_6 [arrowsize=0.7];
+node_3 -> node_10 [arrowsize=0.7];
+}

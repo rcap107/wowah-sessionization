@@ -189,6 +189,10 @@ learner.predict({"data_path": "new_data.csv"})
 
 ![](images/learner-schema/make_learner.svg)
 
+## In summary, why Data Ops? 
+
+
+
 
 ## The example: World of Warcraft Avatar History {.smaller}
 
@@ -198,7 +202,13 @@ learner.predict({"data_path": "new_data.csv"})
 - **Features**: sessionization (`SessionEncoder`), monthly aggregates, zone-rarity / Gini location features, lag & diff features
 - **Model**: `HistGradientBoostingClassifier` + `TableVectorizer`, month-by-month temporal CV 
 
+
+::: {.callout-important}
+
 Model optimization is _intentionally_ not the focus of this talk. 
+
+:::
+
 
 
 ## Pain point 1 — Leakage in temporal feature engineering {.smaller}
@@ -355,14 +365,6 @@ learner.predict({"loader": prod_loader})
 - Eager **previews**: pass a value to `var()` and every node shows its result immediately
 - `skb.report()` emits an HTML report: every node's name, description, predecessors, fitted estimator, and **data preview**
 - On failure, the report shows the offending node and the traceback
-
-## Pain point 6 — Big data: subsampling and caching {.smaller}
-
-- 11M rows → interactive development must be fast, but **sampling must preserve players' full trajectories** (`sample_by_user`, not random rows)
-- Feature building (`build_feature_table`) is **very expensive** — naive re-runs during search would explode cost
-- DataOps: `skb.subsample()` for development is **automatically off** for real `eval` / `cross_validate` runs
-- Caching (`skrub.set_config(cache=True)`) persists expensive node results on disk **across trials** — changing only `learning_rate` doesn't recompute features
-- In-memory reuse is free: the `feature_table` node is computed once per parameter set and shared (`main.py:229-239`)
 
 
 ## Pain point 7 — Stay in your dataframe API inside the plan {.smaller}
