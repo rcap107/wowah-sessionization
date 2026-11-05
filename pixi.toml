@@ -1,0 +1,51 @@
+[workspace]
+name = "wowah-sessionization"
+description = "Monthly player churn prediction on the World of Warcraft Avatar History dataset"
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "linux-64"]
+
+[dependencies]
+python = ">=3.12"
+polars = ">=1.30"
+skrub = ">=0.11"
+scikit-learn = ">=1.7"
+numpy = "*"
+pandas = "*"
+pyarrow = "*"
+matplotlib = "*"
+seaborn = "*"
+optuna = ">=4"
+optuna-dashboard = "*"
+sqlalchemy = "*"
+tqdm = "*"
+# Needed by `data_op.skb.report()` / `full_report()` to draw the DataOps graph
+graphviz = "*"
+pydot = "*"
+
+# Only needed to re-render the .qmd files (blog post and slides)
+[feature.docs.dependencies]
+quarto = "*"
+jupyter = "*"
+ipykernel = "*"
+nbformat = "*"
+nbclient = "*"
+
+# Lets scripts in subfolders (plotting/) import `src.utils`
+[activation.env]
+PYTHONPATH = "$PIXI_PROJECT_ROOT"
+
+[environments]
+default = { solve-group = "default" }
+docs = { features = ["docs"], solve-group = "default" }
+
+[tasks]
+# Build and print the user-month churn table from data/wowah_data_raw.parquet
+churn = "python add_churn.py"
+# Build the DataOps plan on a 10% user sample, evaluate it, and write the report
+evaluate = "python main.py"
+# Plotting scripts (cell-style scripts, run them from the repository root)
+plot-session-times = "python plotting/plot_session_start_end.py"
+plot-stats-by-month = "python plotting/plot_stats_by_month.py"
+
+[feature.docs.tasks]
+render = "quarto render"
