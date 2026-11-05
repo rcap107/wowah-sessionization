@@ -357,7 +357,7 @@ def add_lagged_features(
 
 if __name__ == "__main__":
     df = pl.read_parquet("data/wowah_churn_data.parquet")
-    historical_data = pl.read_parquet("data/wowah_data_raw.parquet")
+    historical_data = pl.read_parquet("data/wowah_data_2008.parquet")
     fixed_attr = historical_data.select(pl.col("char", "charclass", "race")).unique()
 
     df = df.join(fixed_attr, on="char", how="left", maintain_order="left")

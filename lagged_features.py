@@ -8,7 +8,7 @@ MIN_DATE = datetime.strptime("2008-01-01", "%Y-%m-%d")
 MAX_DATE = datetime.strptime("2008-06-30", "%Y-%m-%d")
 #%% 
 df = pl.read_parquet("data/wowah_churn_data.parquet")
-historical_data = pl.read_parquet("data/wowah_data_raw.parquet")
+historical_data = pl.read_parquet("data/wowah_data_2008.parquet")
 # %%
 feature_table = build_feature_table(historical_data)
 r = add_features(df["char", "month"], feature_table)

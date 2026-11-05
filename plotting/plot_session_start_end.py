@@ -11,7 +11,7 @@ from src.utils import (
     sample_by_user,
 )
 
-df = pl.read_parquet("data/wowah_data_raw.parquet")
+df = pl.read_parquet("data/wowah_data_2008.parquet")
 df_user_month = pl.read_parquet("data/wowah_churn_data.parquet").select(
     "char", "month", "first_month"
 )

@@ -2,7 +2,7 @@
 import polars as pl
 
 # %%
-df = pl.read_parquet("data/wowah_data_raw.parquet")
+df = pl.read_parquet("data/wowah_data_2008.parquet")
 # %%
 from skrub import TableReport
 

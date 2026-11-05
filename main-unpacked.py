@@ -207,7 +207,7 @@ def load(file, fraction=0.1):
 def get_env():
     df = pl.read_parquet("data/wowah_churn_data.parquet")
     df = sample_by_user(df, fraction=0.1)
-    historical_data_file = "data/wowah_data_raw.parquet"
+    historical_data_file = "data/wowah_data_2008.parquet"
     return {
         "query": df,
         "historical_data_file": historical_data_file,

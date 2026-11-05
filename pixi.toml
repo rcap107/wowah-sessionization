@@ -39,10 +39,11 @@ default = { solve-group = "default" }
 docs = { features = ["docs"], solve-group = "default" }
 
 [tasks]
-# Build and print the user-month churn table from data/wowah_data_raw.parquet
+# Build and print the user-month churn table from data/wowah_data_2008.parquet
 churn = "python add_churn.py"
-# Build the DataOps plan on a 10% user sample, evaluate it, and write the report
-evaluate = "python main.py"
+# Build the DataOps plan on a 10% user sample, evaluate it, and generate the report
+evaluate = "python main.py --dataset 2008"
+evaluate-all = "python main.py --dataset all"
 # Plotting scripts (cell-style scripts, run them from the repository root)
 plot-session-times = "python plotting/plot_session_start_end.py"
 plot-stats-by-month = "python plotting/plot_stats_by_month.py"
