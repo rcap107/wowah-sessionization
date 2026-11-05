@@ -37,15 +37,31 @@ from adding_features import (
 # MAX_DATE = datetime.strptime("2008-06-30", "%Y-%m-%d")
 # Actual ranges for the full dataset
 MIN_DATE = datetime.strptime("2006-02-01", "%Y-%m-%d")
-MAX_DATE = datetime.strptime("2008-11-01", "%Y-%m-%d")
+# The last split point is October 2008, so the last test month is November: its
+# target depends on December, while the January 2009 data in the full dataset is
+# incomplete (it stops on January 10th).
+MAX_DATE = datetime.strptime("2008-10-01", "%Y-%m-%d")
+
+# Input files that main.py can run on: the year 2008 only (fast, good for
+# development) or the full 2006-2009 dataset.
+DATASETS = {
+    "2008": "data/wowah_data_2008.parquet",
+    "all": "data/wowah_data_all.parquet",
+}
+DEFAULT_DATASET = "2008"
 
 
-# The splitter iterates over the months and selects all the months up to the
-# split point, which is the month during which we want to perform some operation
-# on users that are marked as "churn risks".
+# The splitter iterates over the months. For each split point, the test month is
+# the following month: it is the month during which we would score users and act
+# on the ones marked as "churn risks".
+#
+# The target of a row (churn_next) is the churn status of the month after it, so
+# it is only known one month later. The training set therefore stops one month
+# before the split point: a row from the split point month would have a target
+# computed from the test month.
 class Splitter:
     def split(self, user_month, has_played=None, interval="1mo"):
-        # has_played is not needed in this splitter since we are only splitting
+        # the target is not needed in this splitter since we are only splitting
         # based on the month
         del has_played
         time_range = pl.date_range(MIN_DATE, MAX_DATE, interval, eager=True)
@@ -54,10 +70,11 @@ class Splitter:
             # test_month = split_point + relativedelta(months=1)
             # Or do this with polars which is more consistent with the rest of the code
             test_month = pl.Series([split_point]).dt.offset_by(interval).first()
-            # Train indices are up to split_point excluded
+            last_train_month = pl.Series([split_point]).dt.offset_by("-" + interval).first()
+            # Train indices are up to last_train_month, included
             train_idx = (
                 user_month.with_row_index("idx")
-                .filter(pl.col("month") <= split_point)["idx"]
+                .filter(pl.col("month") <= last_train_month)["idx"]
                 .to_list()
             )
             # Test indices are for the month after split_point
@@ -206,8 +223,8 @@ def load(file, fraction=0.1):
 
 # %%
 def make_data_op(load_fraction=0.1):
-    historical_data_file = skrub.var("historical_data_file")
-    historical_data = historical_data_file.skb.apply_func(load, fraction=load_fraction)
+    historical = skrub.var("historical_data_file")
+    historical_data = historical.skb.apply_func(load, fraction=load_fraction)
     # In the original data, "guild == -1" means "no guild", so I'm replacing -1
     # with nulls.
     historical_data = historical_data.with_columns(
@@ -221,7 +238,7 @@ def make_data_op(load_fraction=0.1):
         build_churn_dataset
     ).skb.set_name("query")
     X = user_month_has_played["char", "month"].skb.mark_as_X(cv=Splitter())
-    y = user_month_has_played["churn"].skb.mark_as_y()
+    y = user_month_has_played["churn_next"].skb.mark_as_y()
 
     # Hyperparameters
     session_gap = skrub.choose_from([30, 60, 15], name="session_gap")
@@ -252,63 +269,58 @@ def make_data_op(load_fraction=0.1):
 # %%
 
 
-def get_env():
-    historical_data_file = "data/wowah_data_raw.parquet"
-    uids = pl.read_parquet("data/wowah_churn_data.parquet")["char"].unique().sample(n=10000).to_list()
-    query = get_query(
-        historical_data_file=historical_data_file,
-        uids=uids,
-    )
-    return {
-        "query": query,
-        "historical_data_file": historical_data_file,
-        "location_features": False,
-        "add_gini": True,
-    }
+def get_env(dataset=DEFAULT_DATASET):
+    # The characters to use are sampled inside the plan (see `load`), so the
+    # features and the (char, month) rows always cover the same characters.
+    return {"historical_data_file": DATASETS[dataset]}
 
 
-def cross_validate():
-    historical_data_file = "data/wowah_data_all.parquet"
-    results = make_data_op().skb.cross_validate(environment=get_env())
-    return results
+def cross_validate(dataset=DEFAULT_DATASET, load_fraction=0.1):
+    data_op = make_data_op(load_fraction=load_fraction)
+    return data_op.skb.cross_validate(environment=get_env(dataset))
 
 
-def random_search():
+def random_search(dataset=DEFAULT_DATASET, load_fraction=0.1):
     # df = pl.read_parquet("data/wowah_churn_data.parquet")
     # df = sample_by_user(df, fraction=0.15)
-    historical_data_file = "data/wowah_data_raw.parquet"
-    search = make_data_op().skb.make_randomized_search(
+    search = make_data_op(load_fraction=load_fraction).skb.make_randomized_search(
         backend="optuna",
         n_jobs=-1,
         n_iter=16,
         # study_name="wowah_churn_study",
         storage="sqlite:///wowah_churn_study.db",
     )
-    env = {"historical_data_file": historical_data_file}
-
-    return search, env
+    return search, get_env(dataset)
 
 
-def evaluate():
-    historical_data_file = "data/wowah_data_raw.parquet"
-    data_op = make_data_op()
-    env = get_env()
-    results = data_op.skb.eval(env)
+def evaluate(dataset=DEFAULT_DATASET, load_fraction=0.1):
+    data_op = make_data_op(load_fraction=load_fraction)
+    results = data_op.skb.eval(get_env(dataset))
     return results, data_op
 
 
-def get_query(historical_data_file, uids):
-    query = build_churn_dataset(pl.scan_parquet(historical_data_file)).filter(
-        pl.col("char").is_in(uids)
-    )
-    return query
-
-
 if __name__ == "__main__":
-    results, data_op = evaluate()
-    report = data_op.skb.report(environment=get_env())
-    # results = cross_validate()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Evaluate the churn prediction DataOps plan.")
+    parser.add_argument(
+        "--dataset",
+        choices=list(DATASETS),
+        default=DEFAULT_DATASET,
+        help="'2008' for the year 2008 only, 'all' for the full dataset",
+    )
+    parser.add_argument(
+        "--fraction",
+        type=float,
+        default=0.1,
+        help="fraction of characters to sample (1 keeps all of them)",
+    )
+    args = parser.parse_args()
+
+    results, data_op = evaluate(args.dataset, load_fraction=args.fraction)
+    report = data_op.skb.report(environment=get_env(args.dataset))
+    # results = cross_validate(args.dataset, load_fraction=args.fraction)
     # print(results)
 
-    # search, env = random_search()
+    # search, env = random_search(args.dataset, load_fraction=args.fraction)
     # search.fit(env)

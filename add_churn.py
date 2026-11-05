@@ -105,7 +105,17 @@ def add_churn(user_month, data):
     whether the user played in that month. Any missing values in "has_played" are
     filled with False: missing values mean that the player did not play in that
     particular month.
+
+    It also adds the "churn" column (churned as of this month: absent this month
+    and the previous one) and the "churn_next" column, the prediction target:
+    the value of "churn" in the *following* month. Features for a given month are
+    built from the previous month's data, so the target cannot be the churn
+    status of the same month: that status includes "absent last month", which
+    is exactly what the features reveal. "churn_next" is null for the last
+    month in the data, because the following month has not been observed.
     """
+
+    last_month = data.lazy().select(pl.col("month").max()).collect().item()
 
     df_with_user_month = (
         user_month.join(
@@ -134,6 +144,11 @@ def add_churn(user_month, data):
             & ~pl.col("has_played").fill_null(False)
             & ~pl.col("prev_played").fill_null(False)
         )
+        .with_columns(
+            churn_next=pl.when(pl.col("month").dt.offset_by("1mo") <= last_month)
+            .then(pl.col("churn").shift(-1).over("char"))
+            .otherwise(None)
+        )
     )
     return df_with_user_month
 
@@ -156,6 +171,7 @@ def remove_unrealistic_entries(churn_data, data):
             pl.col("has_played"),
             pl.col("prev_played"),
             pl.col("churn"),
+            pl.col("churn_next"),
             pl.col("first_month_right").alias("first_month"),
         )
     )
@@ -169,10 +185,12 @@ def build_churn_dataset(historical_data):
     user_month = make_user_month(historical_data)
     churn_data = add_churn(user_month, data)
     churn_data = remove_unrealistic_entries(churn_data, data)
-    return churn_data.collect()
+    # Rows whose target is unknown (the last observed month and the padding
+    # months after it) cannot be used to train or evaluate a model.
+    return churn_data.filter(pl.col("churn_next").is_not_null()).collect()
 
 
 if __name__ == "__main__":
-    churn_data = build_churn_dataset(pl.scan_parquet("data/wowah_data_raw.parquet"))
+    churn_data = build_churn_dataset(pl.scan_parquet("data/wowah_data_2008.parquet"))
     print(churn_data.head())
     # churn_data.write_parquet("data/wowah_churn_data.parquet")
