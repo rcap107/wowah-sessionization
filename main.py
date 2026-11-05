@@ -141,12 +141,12 @@ def build_feature_table(
     for month in user_month["month"].unique().sort():
         this_month_X = filter_df_by_month(user_month, month)
 
-        # Selecting only the entries in the historical data whose month + 2 is equal
-        # to the month I am trying to predict on.
-        # This means that if the "target month" is April, then the historical data
-        # should be filtered to keep only the rows where the current month + 2
-        # is equal to April, that is, the month is February. This is equivalent
-        # to saying "I want the rows for the current month - 2 months", but it's
+        # Selecting only the entries in the historical data from the month before
+        # the one I am building features for.
+        # This means that if the row's month is April, then the historical data
+        # is filtered to keep only the rows from March. Shifting the data forward
+        # by one interval and filtering on the current month is equivalent to
+        # saying "I want the rows for the current month - 1 month", but it's
         # easier to implement
         kept_historical_data = historical_data.with_columns(
             pl.col("month").dt.offset_by(interval)
