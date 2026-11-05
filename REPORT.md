@@ -30,7 +30,7 @@ Avatar and guild names were anonymized to positive integers for privacy. The ori
 |---|---|---|
 | `wowah.rar` | 551 MB | Original compressed raw log archive |
 | `WoWAH/` | — | Extracted raw `.txt` log files, organized by quarter → day → time-of-day |
-| `wowah_parsed_all.csv` | 1.9 GB | Parsed CSV produced by `parser_mp.py` from the raw logs |
+| `wowah_parsed_all.csv` | 1.9 GB | Parsed CSV produced by `src/parse_to_single_table.py` from the raw logs |
 | `wowah_parsed_all.parquet` | 162 MB | Parquet version of the full parsed CSV |
 | `wowah_data_raw.parquet` | 75 MB | Cleaned raw data used as the historical input for feature engineering |
 | `wowah_data_all.parquet` | 138 MB | Extended version of the raw data |
@@ -55,7 +55,7 @@ This means features are built from data two months prior to the prediction targe
 
 ## Scripts
 
-### `parser_mp.py` — Raw Log Parsing
+### `parse_to_single_table.py` — Raw Log Parsing
 
 Reads the thousands of raw `.txt` log files from `WoWAH/` using a multiprocessing `ProcessPoolExecutor`. A regex pattern extracts the 7 relevant fields (timestamp, avatar ID, guild, level, race, class, zone) from each line and writes them to a consolidated CSV. Files with no regex matches are logged to `no_matches_files.log`.
 
@@ -162,13 +162,18 @@ Produces **polar clock plots** showing the distribution of session start and end
 | Library | Role |
 |---|---|
 | `polars` | Fast dataframe operations throughout (lazy evaluation, Parquet I/O) |
-| `skrub` | `SessionEncoder`, `TableVectorizer`, `DatetimeEncoder`, data operation graph (`skb`) |
-| `scikit-learn` | `HistGradientBoostingClassifier`, `HDBSCAN`, `KMeans`, `PCA`, cross-validation |
+| `skrub` | `SessionEncoder`, `TableVectorizer`, `DatetimeEncoder`, Data Ops (`skb`) |
+| `scikit-learn` | `HistGradientBoostingClassifier`, ... |
 | `matplotlib` / `seaborn` | Visualization |
 | `concurrent.futures` | Multiprocessing for raw log parsing |
 
----
 
 ## Summary
 
-In short: this repo ingests a large public dataset of World of Warcraft player activity logs, parses and cleans the raw files, engineers behavioral features at the session and monthly level (how much players play, where they go, how they distribute their time), and trains a gradient-boosted classifier to predict one month in advance which players are about to quit. The temporal cross-validation strategy is carefully designed so that no future information ever leaks into training features or labels.
+In short: this repo ingests a large public dataset of World of Warcraft player
+activity logs, parses and cleans the raw files, engineers behavioral features at
+the session and monthly level (how much players play, where they go, how they
+distribute their time), and trains a gradient-boosted classifier to predict one
+month in advance which players are about to quit. The temporal cross-validation
+strategy is designed so that no future information ever leaks into training
+features or labels.
