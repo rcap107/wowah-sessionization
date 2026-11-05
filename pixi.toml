@@ -55,4 +55,7 @@ plot-session-times = "python plotting/plot_session_start_end.py"
 plot-stats-by-month = "python plotting/plot_stats_by_month.py"
 
 [feature.docs.tasks]
+# Use with the docs environment: `pixi run -e docs render-draft`
 render = "quarto render"
+render-draft = "quarto render draft.qmd"
+render-slides = "quarto render skrub-dataops.qmd && quarto render pain_points.qmd"
