@@ -77,7 +77,11 @@ def add_session_features(df, hist_session_duration):
         .agg(
             s_duration.sum().alias("monthly_total_session_duration"),
             s_duration.mean().alias("monthly_avg_session_duration"),
-            s_duration.std()
+            # std is not supported on Duration columns, so compute it on microseconds
+            s_duration.dt.total_microseconds()
+            .std()
+            .cast(pl.Int64)
+            .cast(pl.Duration("us"))
             .fill_null(pl.duration(seconds=0))
             .alias("monthly_std_session_duration"),
             s_duration.count().alias("monthly_num_sessions"),
