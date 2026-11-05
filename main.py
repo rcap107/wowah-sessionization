@@ -206,7 +206,7 @@ def load(file, fraction=0.1):
 
 # %%
 def make_data_op(load_fraction=0.1):
-    historical_data_file = skrub.var("data_loader", load)
+    historical_data_file = skrub.var("historical_data_file")
     historical_data = historical_data_file.skb.apply_func(load, fraction=load_fraction)
     # In the original data, "guild == -1" means "no guild", so I'm replacing -1
     # with nulls.
@@ -306,7 +306,7 @@ def get_query(historical_data_file, uids):
 
 if __name__ == "__main__":
     results, data_op = evaluate()
-    # data_op.skb.full_report(environment=get_env())
+    report = data_op.skb.report(environment=get_env())
     # results = cross_validate()
     # print(results)
 

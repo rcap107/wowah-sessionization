@@ -294,8 +294,10 @@ estimator.predict(X_new)</code></pre>
 </div>
 </div>
 </section>
-<section id="basic-example" class="slide level2 smaller">
-<h2>Basic example</h2>
+<section id="basic-example" class="slide level2 smaller" data-auto-animate="true">
+<h2 data-id="quarto-animate-title">Basic example</h2>
+<div class="columns">
+<div class="column" style="width:60%;">
 <p>Declare the pipeline</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a aria-hidden="true" tabindex="-1"></a>data_path <span class="op">=</span> skrub.var(<span class="st">"data_path"</span>)</span>
 <span id="cb1-2"><a aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> data_path.skb.apply_func(pd.read_csv)</span>
@@ -307,10 +309,12 @@ estimator.predict(X_new)</code></pre>
 <p>Make a “learner” (object with <code>fit()</code> &amp; <code>predict()</code>)</p>
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a aria-hidden="true" tabindex="-1"></a>learner <span class="op">=</span> pred.skb.make_learner().fit({<span class="st">"data_path"</span>: <span class="st">"historical_data.csv"</span>})</span>
 <span id="cb3-2"><a aria-hidden="true" tabindex="-1"></a>learner.predict({<span class="st">"data_path"</span>: <span class="st">"new_data.csv"</span>})</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p><a href="http://localhost:8888/notebooks/intro/intro.ipynb" target="_blank">intro.ipynb</a></p>
+</div><div class="column" style="width:40%;">
+<p><img data-src="images/base_ex.svg"></p>
+</div></div>
 </section>
-<section id="section-4" class="slide level2">
-<h2></h2>
+<section id="basic-example-1" class="slide level2" data-auto-animate="true">
+<h2 data-id="quarto-animate-title">Basic example</h2>
 
 <img data-src="images/learner-schema/make_learner.svg" class="r-stretch"></section>
 <section id="the-example-world-of-warcraft-avatar-history" class="slide level2 smaller">
@@ -373,23 +377,19 @@ estimator.predict(X_new)</code></pre>
 <li>Now, the splitter is honored by <code>cross_validate</code>, <code>train_test_split</code>, randomized search, and scoring</li>
 </ul>
 </div><div class="column" style="width:60%;">
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4" data-code-line-numbers="|6-15"><pre class="sourceCode numberSource python number-lines code-with-copy" data-id="quarto-animate-code"><code class="sourceCode python hljs"><span id="cb4-1" class="hljs-ln-code"><a></a><span class="kw">class</span> Splitter:</span>
-<span id="cb4-2" class="hljs-ln-code"><a></a>    <span class="kw">def</span> split(<span class="va">self</span>, user_month, has_played<span class="op">=</span><span class="va">None</span>, interval<span class="op">=</span><span class="st">"1mo"</span>):</span>
-<span id="cb4-3" class="hljs-ln-code"><a></a>        time_range <span class="op">=</span> pl.date_range(MIN_DATE, MAX_DATE, interval, eager<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb4-4" class="hljs-ln-code"><a></a>        <span class="cf">for</span> split_point <span class="kw">in</span> time_range:</span>
-<span id="cb4-5" class="hljs-ln-code"><a></a>            test_month <span class="op">=</span> pl.Series([split_point]).dt.offset_by(interval).first()</span>
-<span id="cb4-6" class="hljs-ln-code"><a></a>            train_idx <span class="op">=</span> (</span>
-<span id="cb4-7" class="hljs-ln-code"><a></a>                user_month.with_row_index(<span class="st">"idx"</span>)</span>
-<span id="cb4-8" class="hljs-ln-code"><a></a>                .<span class="bu">filter</span>(pl.col(<span class="st">"month"</span>) <span class="op">&lt;=</span> split_point)[<span class="st">"idx"</span>]</span>
-<span id="cb4-9" class="hljs-ln-code"><a></a>                .to_list()</span>
-<span id="cb4-10" class="hljs-ln-code"><a></a>            )</span>
-<span id="cb4-11" class="hljs-ln-code"><a></a>            test_idx <span class="op">=</span> (</span>
-<span id="cb4-12" class="hljs-ln-code"><a></a>                user_month.with_row_index(<span class="st">"idx"</span>)</span>
-<span id="cb4-13" class="hljs-ln-code"><a></a>                .<span class="bu">filter</span>(pl.col(<span class="st">"month"</span>) <span class="op">==</span> test_month)[<span class="st">"idx"</span>]</span>
-<span id="cb4-14" class="hljs-ln-code"><a></a>                .to_list()</span>
-<span id="cb4-15" class="hljs-ln-code"><a></a>            )</span>
-<span id="cb4-16" class="hljs-ln-code"><a></a>            <span class="cf">if</span> train_idx <span class="kw">and</span> test_idx:</span>
-<span id="cb4-17" class="hljs-ln-code"><a></a>                <span class="cf">yield</span> train_idx, test_idx</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy" data-id="quarto-animate-code"><code class="sourceCode python hljs"><span id="cb4-1" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Splitter:</span>
+<span id="cb4-2" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> split(<span class="va">self</span>, X, y<span class="op">=</span><span class="va">None</span>):</span>
+<span id="cb4-3" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>        ...</span>
+<span id="cb4-4" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> split_point <span class="kw">in</span> ...:</span>
+<span id="cb4-5" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>            test_month <span class="op">=</span> pl.Series([split_point]).dt.offset_by(<span class="st">"1mo"</span>).first()</span>
+<span id="cb4-6" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>            train_idx <span class="op">=</span> (</span>
+<span id="cb4-7" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>                X.with_row_index(<span class="st">"idx"</span>)</span>
+<span id="cb4-8" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>                .<span class="bu">filter</span>(pl.col(<span class="st">"month"</span>) <span class="op">&lt;=</span> split_point)[<span class="st">"idx"</span>]</span>
+<span id="cb4-9" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>            )</span>
+<span id="cb4-10" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>            test_idx <span class="op">=</span> (</span>
+<span id="cb4-11" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>                X.with_row_index(<span class="st">"idx"</span>)</span>
+<span id="cb4-12" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>                .<span class="bu">filter</span>(pl.col(<span class="st">"month"</span>) <span class="op">==</span> test_month)[<span class="st">"idx"</span>]</span>
+<span id="cb4-13" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>            )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div></div>
 </section>
 <section id="pain-point-3-tuning-wrangling-choices-not-just-model-knobs" class="slide level2 smaller">

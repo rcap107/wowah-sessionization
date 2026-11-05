@@ -1,0 +1,16 @@
+flowchart TD
+    A["build_feature_table"] --> C["Build full (char, month) grid<br/>+ join fixed per-char features"]
+    C --> F["For each month"]
+    F --> G["Keep only data<br/>from previous month"]
+    G --> I["SessionEncoder →<br/>session features"]
+    I --> L{"Use location<br/>features?"}
+    L -- "yes" --> O["add_location_features"]
+    L -- "no" --> Q["Append month's features"]
+    O --> Q
+    Q --> R{"More<br/>months?"}
+    R -- "yes" --> F
+    R -- "no" --> S["Concat all months"]
+    S --> U{"lags?"}
+    U -- "yes" --> V["add_lagged_features"]
+    U -- "no" --> W["Return feature_table"]
+    V --> W

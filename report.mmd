@@ -1,0 +1,28 @@
+flowchart TD
+    n0["Var 'historical_data_file'"] --> n1["Call 'load'"]
+    n1 --> n2["CallMethod 'with_columns'"]
+    n2 --> n3["query | Call 'build_churn_dataset'"]
+    n3 --> n4["GetItem ('char', 'month')"]
+    n4 --> n5["X"]
+    n5 --> n8["Call 'add_features'"]
+    n2 --> n6["CallMethod 'collect'"]
+    n6 --> n7["Call 'build_feature_table'"]
+    n7 --> n8
+    n8 --> n9["Apply TableVectorizer"]
+    n9 --> n11["Apply HistGradientBoostingClassifier"]
+    n3 --> n10["y: GetItem 'churn'"]
+    n10 --> n11
+    n11 --> n12["Scoring (1 scorers)"]
+
+    style n5 fill:#c6d5f0
+    style n10 fill:#fad9c6
+
+    A["build_feature_table"] --> C["Build full (char, month) grid<br/>+ join fixed per-char features"]
+        C --> F["For each month"]
+        F --> G["Keep only data<br/>from previous month"]
+        G --> I["SessionEncoder →<br/>session features"]
+        I --> R{"More<br/>months?"}
+    R -- "yes" --> F
+    R -- "no" --> S["Concat all months"]
+    S --> W["Return feature_table"]
+    W
