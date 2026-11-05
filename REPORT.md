@@ -1,179 +1,218 @@
 # Repository Report: WoWAH Player Churn Prediction Pipeline
 
-## What This Repository Is About
+## What this repository is about
 
-This repository implements a machine learning pipeline to predict **player churn** in *World of Warcraft* (WoW). Given a player and a month, the pipeline predicts whether that player will stop playing in the following month. The goal is to identify at-risk players one month in advance so that interventions can be applied proactively.
+This repository predicts **player churn** in *World of Warcraft* from server
+snapshots. For every `(character, month)` pair, a model estimates whether the
+character has churned, using only behaviour observed in the previous month. The
+code is also the running example of two talks about [skrub](https://skrub-data.org/)
+DataOps (see [Documents](#documents)).
+
+The scripts were last run end to end with Python 3.15, polars 2.1.0, skrub 0.11.0
+and scikit-learn 1.9.1 (`pixi.toml` describes the intended environment).
 
 ---
 
-## The Dataset: World of Warcraft Avatar History (WoWAH)
+## The dataset: World of Warcraft Avatar History (WoWAH)
 
-The raw data comes from the **WoWAH** public dataset (Lee et al., ACM Multimedia Systems 2011). It covers **91,065 avatars** observed over **1,107 days** between January 2006 and January 2009. The data was collected by polling the game server every ~10 minutes, recording the state of every online character at that moment.
+The raw data is the public **WoWAH** dataset (Lee et al., ACM Multimedia Systems 2011):
+91,065 avatars of the Horde faction observed over 1,107 days between January 2006
+and January 2009. The game server was polled about every 10 minutes and the state of
+every online character was logged (a "heartbeat"). Avatar and guild names are
+anonymised to integers.
 
-Each record (a "heartbeat") contains:
-
-| Field | Description |
+| Column | Description |
 |---|---|
 | `timestamp` | Date and time of the observation |
-| `char` (avatar ID) | Anonymized integer identifier for the character |
-| `guild` | Guild membership (-1 = no guild, otherwise an anonymized integer) |
-| `level` | Character level at time of observation |
-| `race` | Character race (e.g., Orc, Human, Night Elf, …) |
-| `charclass` | Character class (e.g., Warrior, Mage, Priest, …) |
-| `zone` | In-game zone/location |
+| `char` | Anonymised character ID (called `avatar_id` in the parsed CSV) |
+| `guild` | Guild ID, `-1` when the character has no guild (replaced with null in the pipeline) |
+| `level` | Character level |
+| `race`, `charclass` | Character race and class |
+| `zone` | In-game zone |
 
-Avatar and guild names were anonymized to positive integers for privacy. The original raw files are structured as `.txt` logs organized by quarter and day (e.g., `WoWAH/2006_01_03/2006-01-01/00-03-56.txt`), with one file per 10-minute polling interval.
+### Files in `data/`
 
-### Data Files in `data/`
+`data/` is git-ignored except for two parquet files.
 
 | File | Size | Description |
 |---|---|---|
-| `wowah.rar` | 551 MB | Original compressed raw log archive |
-| `WoWAH/` | — | Extracted raw `.txt` log files, organized by quarter → day → time-of-day |
-| `wowah_parsed_all.csv` | 1.9 GB | Parsed CSV produced by `src/parse_to_single_table.py` from the raw logs |
-| `wowah_parsed_all.parquet` | 162 MB | Parquet version of the full parsed CSV |
-| `wowah_data_raw.parquet` | 75 MB | Cleaned raw data used as the historical input for feature engineering |
-| `wowah_data_all.parquet` | 138 MB | Extended version of the raw data |
-| `wowah_churn_data.parquet` | 385 KB | One row per (character, month) with a boolean `has_played` target column |
-| `wowah_user_month_with_churn.parquet` | 14 MB | Intermediate user-month dataset with churn labels |
-| `no_matches_files.log` | 1.5 KB | Log of raw files that produced no regex matches during parsing (21 files) |
-| `index.html` | 7.4 KB | Original WoWAH dataset documentation page |
+| `wowah.rar` | 551 MB | Original archive of `.txt` logs |
+| `wowah_parsed_all.csv` / `.parquet` | 1.9 GB / 163 MB | Output of `src/parse_to_single_table.py` and `src/convert_to_parquet.py` |
+| `wowah_data_all.parquet` | 138 MB | Full dataset: 35.6M rows, 90,456 characters, 2005-12-31 to 2009-01-10 |
+| `wowah_data_raw.parquet` | 75 MB | **Year 2008 only**: 10.8M rows, 37,354 characters. Default input of the pipeline |
+| `wowah_churn_data.parquet` | 383 KB | Legacy `(char, month, has_played, first_month)` table |
+| `wowah_user_month_with_churn.parquet` | 14 MB | Legacy `(char, month, churned)` table |
+| `no_matches_files.log`, `index.html`, `img/` | | Parser log and the original dataset page |
+
+No script in the repository creates `wowah_data_raw.parquet` or
+`wowah_data_all.parquet` from the parsed files (the renaming of `avatar_id` to `char`
+and the selection of 2008 happened elsewhere). The churn table used to be
+written by `add_churn.py`, but that line is now commented out; the pipeline builds
+the table in memory instead. `main.py`'s `get_env()`, the older scripts and two
+plotting scripts still read `wowah_churn_data.parquet`.
 
 ---
 
-## Pipeline Overview
+## Problem definition
 
-The pipeline follows a strict **temporal cross-validation** design to prevent data leakage:
+Churn is defined at monthly resolution in `add_churn.py`:
 
-- **Training set**: all historical data up to month *M*
-- **Test set**: data from month *M+1* only
-- **Prediction target**: whether the player will be active in month *M+2*
+1. Build the grid of all `(char, month)` pairs, from the first month in the data to
+   **3 months after the last one**. The extra months allow lagged features to be
+   evaluated for months with no data yet.
+2. `has_played` is `True` if the character has at least one heartbeat in the month.
+3. Drop rows before the character's first month.
+4. `prev_played` is `has_played` shifted by one month within each character.
+5. `churn = ~has_played & ~prev_played`, i.e. the character was absent for **two
+   consecutive months**, the month itself and the one before. A character that
+   skips one month and then comes back is not marked as churned.
 
-This means features are built from data two months prior to the prediction target, giving one month of "intervention time" between when the model scores a player and when churn would occur.
+`build_churn_dataset()` returns char, month, has_played, prev_played, churn,
+first_month. The model's target `y` is `churn`; `X` is `(char, month)`.
 
----
+**Feature timing.** For a row at month `M`, `build_feature_table` keeps only the
+heartbeats from month `M - 1` (it shifts the month column by one interval and
+filters on `M`). This is what prevents leakage. A comment in `main.py` still mentions
+`M - 2`; the code uses one month.
 
-## Scripts
-
-### `parse_to_single_table.py` — Raw Log Parsing
-
-Reads the thousands of raw `.txt` log files from `WoWAH/` using a multiprocessing `ProcessPoolExecutor`. A regex pattern extracts the 7 relevant fields (timestamp, avatar ID, guild, level, race, class, zone) from each line and writes them to a consolidated CSV. Files with no regex matches are logged to `no_matches_files.log`.
-
-### `convert_to_parquet.py` — CSV to Parquet
-
-Reads the parsed CSV and converts it to a Parquet file with proper types (datetime parsing, integer fields). This is a one-time preprocessing step to speed up all downstream reads.
-
-### `add_churn.py` — Churn Label Construction
-
-Constructs the supervised learning target. The logic:
-
-1. Generates a complete cross-product of all (character, month) pairs across the full date range.
-2. Marks each pair `has_played = True` if the character has any heartbeat in that month, `False` otherwise.
-3. Removes rows where the month precedes a character's first-ever observed month (those would be unrealistic "never existed yet" negatives).
-4. Saves the result to `wowah_churn_data.parquet`.
-
-### `adding_features.py` — Feature Engineering
-
-The core feature library. Features fall into three categories:
-
-**Session features** (via `skrub.SessionEncoder`): Groups consecutive heartbeats into sessions using a configurable inactivity gap (30 or 60 minutes). From sessions computes:
-
-- Monthly session count
-- Total session duration per month
-- Average session duration per month
-
-**Player features** (monthly, per character):
-
-- Max level reached
-- Number of unique zones visited
-- Most frequent zone
-- Number of guilds joined / first and last guild
-
-**Class-level features** (monthly aggregates across the whole playerbase by class):
-
-- Average level for the player's class
-- Number of active players for the player's class
-
-**Location features** (`add_location_features`):
-
-- **Zone rarity**: `log(N / n_visitors)` — how niche a zone is relative to the total playerbase. High rarity = few players visit it.
-- **Hub identification**: zones below the 10th percentile of rarity are flagged as hubs (very popular zones).
-- **Player rarity score**: max and mean rarity of all zones a player visited; fraction of time spent in hubs.
-- **Location Gini coefficient**: measures how evenly a player distributes their time across zones (excluding hubs). Low Gini = grinding one spot; high Gini = exploring broadly.
-
-### `main.py` — ML Pipeline and Cross-Validation
-
-Orchestrates everything into a `skrub` data operation graph:
-
-1. Loads `wowah_churn_data.parquet` (optionally sampling 10% of users for speed).
-2. Defines the `Splitter` class: a custom scikit-learn–compatible cross-validator that iterates month by month, always using all past months as training data and one future month as the test set.
-3. Calls `add_features()` which loops over each unique month in the query set, filters historical data to the appropriate two-month offset, runs session encoding, and builds all features — ensuring zero leakage.
-4. Vectorizes features with `skrub.TableVectorizer`.
-5. Fits a `HistGradientBoostingClassifier` (gradient boosted trees with native support for missing values).
-
-Hyperparameters exposed for search:
-
-- `session_gap`: 30 or 60 minutes
-- `use_location`: whether to include location features (slower)
-
-The entry point `cross_validate()` runs the full temporal cross-validation and prints results.
-
-### `exploration.py` / `exploring_data.py` — Data Exploration
-
-Notebook-style scripts (using `# %%` cell markers) for initial data exploration:
-- `exploration.py`: generates a `skrub.TableReport`, plots average level and character count by month on a dual-axis chart.
-- `exploring_data.py`: implements and compares Polars vs. Pandas sessionization approaches on the raw data (using a 20-minute inactivity gap for session splitting).
-
-### `location_features.py` — Location Feature Exploration
-
-A standalone exploration script for location-based behavioral signals. Goes beyond what ends up in the final pipeline, experimenting with:
-
-- Level-adjusted zone offsets (is a player over- or under-leveled for the zones they frequent?)
-- **Temporal variance**: standard deviation and entropy of session start/end hours (in circular/radian space to handle midnight wrap-around) and day-of-week — low variance suggests habitual play patterns.
-- **Spatial entropy**: normalized entropy of time-per-zone distribution (filtering out hubs and very short visits) — low entropy means the player focuses on few locations.
-- Fraction of playtime in top-3 zones (with and without hubs).
-- Exploratory HDBSCAN clustering of players on Gini × spatial entropy.
-
-### `cluster_users.py` — User Clustering
-
-Uses the `skrub` data operation API to build a clustering pipeline:
-
-1. Applies `SessionEncoder` to produce sessions.
-2. Engineers session-level, character-level, and playerbase-level features.
-3. Vectorizes with `TableVectorizer` + `DatetimeEncoder` (circular periodic encoding).
-4. Aggregates all features to one row per user (mean).
-5. Scales with `skrub.SquashingScaler`, imputes missing values.
-6. Runs `HDBSCAN` to identify player archetypes.
-7. Visualizes clusters with PCA (2D) and scatter plots.
-
-### `plot_session_start_end.py` — Session Timing Visualization
-
-Produces **polar clock plots** showing the distribution of session start and end times across all players in 15-minute bins. The polar projection naturally handles the circular nature of time-of-day (midnight wrap-around). Useful for understanding when players tend to log in and log out.
-
-### `src/utils.py` — Utility Functions
-
-- `sample_by_user(df, fraction)`: samples a fraction of unique characters and returns all their rows (preserves complete trajectories, not random row samples).
-- `get_session_duration(df)`: computes session start, end, and duration from a session-encoded dataframe; floors single-heartbeat sessions at 1 minute to avoid zero-duration sessions masking activity.
+**Validation.** The custom `Splitter` in `main.py` iterates over months from
+`MIN_DATE` (2006-02-01) to `MAX_DATE` (2008-11-01). At each `split_point` it trains on
+all rows with `month <= split_point` and tests on the rows of the next month. Splits
+with an empty train or test set are skipped, so the 2008 data gives 11 folds. A
+custom splitter is needed because the number of rows per month grows over time, which
+breaks `TimeSeriesSplit`'s assumption of equal-size folds.
 
 ---
 
-## Technology Stack
+## Code walkthrough
+
+### `main.py`: pipeline
+
+- `build_feature_table(historical_data, session_gap, use_location, add_gini, interval, lags)`
+  builds a feature table for **every** `(char, month)` pair, independently of the CV
+  fold. This is needed because lag features need each character's full monthly
+  timeline. For each month it:
+  1. keeps the previous month's heartbeats;
+  2. runs `skrub.SessionEncoder` (split by `char`, gap `session_gap` minutes) and
+     computes session durations;
+  3. adds the general features (below);
+  4. optionally runs a second `SessionEncoder` split by `["char", "zone"]` and adds
+     location features.
+
+  Afterwards it fills null session durations with 0 and adds lag/diff features.
+- `add_features(X, feature_table)` joins a fold's `(char, month)` rows to that table.
+- `make_data_op(load_fraction=0.1)` builds the skrub DataOps plan:
+  `load` (10% sample of characters) → guild `-1` to null → `build_churn_dataset` →
+  `X`/`y` marked with `Splitter` → `build_feature_table` → `add_features` →
+  `TableVectorizer` → `HistGradientBoostingClassifier` scored with ROC AUC.
+  Searched choices: `session_gap` ∈ {15, 30, 60}, `location_features` (bool),
+  `lags` ∈ {none, (1), (1, 2), (1, 2, 3)}, learning rate ∈ [0.1, 0.5] (log scale).
+  `add_gini` is fixed to `True`.
+- Entry points: `evaluate()` (run by `python main.py`, then `data_op.skb.report()`),
+  `cross_validate()`, `random_search()` (Optuna, results in `wowah_churn_study.db`).
+  `get_env()` supplies the inputs: the raw parquet path and a query restricted to
+  10,000 random characters taken from `wowah_churn_data.parquet`.
+
+### `add_churn.py`: churn table
+
+`make_data`, `make_user_month`, `add_churn`, `remove_unrealistic_entries` and
+`build_churn_dataset` implement the definition above. Running the file prints the head of
+the table.
+
+### `adding_features.py`: features
+
+Fixed per character: `race`, `charclass`.
+
+Per character and month, from the previous month's data:
+
+- **Sessions** (`add_session_features`): total, average and standard deviation of the
+  session duration, number of sessions, average session start and end time. The
+  standard deviation is computed on microseconds, because polars 2.1 cannot compute `std` on a
+  Duration column.
+- **Player** (`add_monthly_player_features`): max level, number of distinct zones, most
+  frequent zone, number of distinct guilds, first and last guild.
+- **Playerbase by class** (`add_class_features`): average level and number of active players of
+  the character's class.
+- **Location** (`add_location_features`, optional):
+  - zone rarity `log(N / unique_visitors)`, zones under the 10th percentile of rarity flagged as hubs;
+  - per player max and mean rarity, and the fraction of zone sessions in hubs;
+  - optionally the Gini coefficient of time spent per non-hub zone (`add_gini`).
+  
+  Location features are computed from the single previous month, not the full history.
+- **Lags** (`add_lagged_features`): for every feature, `<col>_lag{k}` for each requested
+  lag, plus `<col>_diff1` for numeric columns (unsigned counters are cast to signed
+  to avoid wrap-around).
+
+### `src/`
+
+- `utils.sample_by_user`: samples a fraction of characters and keeps all their rows.
+- `utils.get_session_duration`: adds session start, end and duration; a session with a
+  single heartbeat gets a duration of 1 minute, so that "logged in briefly" differs from "never logged in".
+- `parse_to_single_table.py`: multiprocessing regex parser from the raw `.txt` logs to a CSV.
+- `convert_to_parquet.py`: CSV to parquet. Both scripts have hard-coded paths from an earlier layout.
+
+### Exploration and plotting scripts
+
+Cell-style scripts (`# %%`), run from the repository root:
+
+- `location_features.py`: exploration of zone rarity, hubs, Gini, spatial entropy,
+  time-of-day and day-of-week variability and HDBSCAN clustering. Only the rarity and Gini ideas
+  made it into `adding_features.py`.
+- `lagged_features.py`: scratch script that builds the feature table and shows it in a `TableReport`.
+- `main-unpacked.py`: an older, more granular copy of the plan (reads
+  `wowah_churn_data.parquet`, uses `has_played` as target).
+- `plotting/plot_user_months.py`, `plot_stats_by_month.py`, `plot_session_start_end.py`:
+  rows per month, monthly stats, polar plots of session start and end times.
+  `plot_user_months.py` uses `../data/...` paths and so runs from `plotting/`.
+
+---
+
+## Documents
+
+- `draft.qmd`: blog post about the pipeline. It describes an **earlier version**: the target
+  is `has_played` and features come from `M - 2`.
+- `skrub-dataops.qmd`, `pain_points.qmd`: reveal.js slides on the DataOps pain points
+  (leakage, irregular CV, tuning wrangling choices, one deployable learner, debugging, subsampling,
+  staying in the dataframe API). They describe churn as two months of inactivity, as in the current code.
+- `_quarto.yml` renders to `docs/`; `_freeze/` and `.jupyter_cache/` hold execution caches.
+  `report.pdf` is an older rendered report.
+- `report.dot/.mmd/.svg` and `build_feature_table.mmd/.svg` are diagrams of the plan.
+
+---
+
+## Results of a run
+
+`cross_validate()` on `data/wowah_data_raw.parquet` (10% of characters, default
+hyperparameters, 36 s):
+
+| Fold (test month) | Feb 2008 | Mar | Apr | May | Jun | Jul | Aug | Sep | Oct | Nov | Dec |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| ROC AUC | n/a (one class) | 0.50 | 0.71 | 0.74 | 0.76 | 0.81 | 0.81 | 0.79 | 0.85 | 0.87 | 0.74 |
+
+The first fold has only one class in the test set, so AUC is undefined. These numbers are a
+smoke test, not a tuned benchmark. `wowah_churn_study.db` contains the Optuna runs of
+earlier searches.
+
+## Caveats
+
+- Because `churn` requires absence in month `M - 1` and features come from that same month,
+  a character with no activity in `M - 1` has all-null current-month features, and
+  that is a necessary condition for `churn = True`. Check how much of the AUC comes from this
+  structure before comparing it with other definitions.
+- With the 2008-only file, every character seen in January 2008 looks like a new
+  player (`first_month` is cut off at the start of the data). The 3 padding months after
+  the data end are all absences by construction, so they are never evaluated: `MAX_DATE` limits the
+  last test month to December 2008.
+- Several scripts still depend on legacy data files (see [Files in `data/`](#files-in-data)).
+
+## Technology stack
 
 | Library | Role |
 |---|---|
-| `polars` | Fast dataframe operations throughout (lazy evaluation, Parquet I/O) |
-| `skrub` | `SessionEncoder`, `TableVectorizer`, `DatetimeEncoder`, Data Ops (`skb`) |
-| `scikit-learn` | `HistGradientBoostingClassifier`, ... |
-| `matplotlib` / `seaborn` | Visualization |
-| `concurrent.futures` | Multiprocessing for raw log parsing |
-
-
-## Summary
-
-In short: this repo ingests a large public dataset of World of Warcraft player
-activity logs, parses and cleans the raw files, engineers behavioral features at
-the session and monthly level (how much players play, where they go, how they
-distribute their time), and trains a gradient-boosted classifier to predict one
-month in advance which players are about to quit. The temporal cross-validation
-strategy is designed so that no future information ever leaks into training
-features or labels.
+| polars | Dataframes, lazy queries, parquet I/O |
+| skrub | `SessionEncoder`, `TableVectorizer`, DataOps (`skb`), `TableReport` |
+| scikit-learn | `HistGradientBoostingClassifier`, metrics |
+| optuna | Randomized hyperparameter search backend |
+| matplotlib / seaborn | Plots |
+| graphviz / pydot | DataOps report graph |
+| quarto / jupyter | Rendering the `.qmd` documents |
