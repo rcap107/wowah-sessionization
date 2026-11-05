@@ -13,3 +13,6 @@ __pycache__/
 **/*.quarto_ipynb
 
 **/.DS_Store
+# Quarto caches (regenerated on render)
+.jupyter_cache/
+_freeze/
