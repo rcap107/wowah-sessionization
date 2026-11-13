@@ -159,19 +159,12 @@ How do we deal with that?
 
 ## With Data Ops... {.smaller}
 
-**Data wrangling:** filtering, resampling, aggregations, joins, ...
-
-- Cross-validate without [**data leaks**]{style="color: #1a5a8a; font-weight: bold;"}.
-- [**Tune choices**]{style="color: #1a5a8a; font-weight: bold;"} with validation scores.
+- Cross-validate without [**data leaks**]{style="color: #1a5a8a; font-weight: bold;"}: `fit()` on training
+and `predict()` on unseen data. 
+- [**Tune choices**]{style="color: #1a5a8a; font-weight: bold;"} with hyperparameter tuning and validation scores.
 - Replay on [**new inputs**]{style="color: #1a5a8a; font-weight: bold;"}.
-
-::: {.callout-note icon=false style="font-size: 1em;"}
-### DataOps
-
-- All the goodies of the scikit-learn framework: `fit()` & `predict()`, cross-validation, hyperparameter tuning, serialization.
-- Without the usual restrictions & while supporting **arbitrary data processing**: multiple inputs, filtering samples, dynamic arguments ...
-- And more: Optuna integration, pipeline inspection, ...
-:::
+- **Arbitrary data processing** and data wrangling with sample filtering, joins and aggregations, multiple inputs and dynamic arguments.
+- **Inspect** the pipeline step-by-step, **persist** the source code that generates a model.
 
 ## Basic example {.smaller auto-animate="true"}
 
@@ -186,12 +179,14 @@ How do we deal with that?
 
 Declare the pipeline
 
-```{.python code-line-numbers="|1|2|3,4|5-7|"}
+```{.python code-line-numbers="|1-2|3|4-5|6|7-9|"}
 data_path = skrub.var("data_path")
 data = data_path.skb.apply_func(pd.read_csv)
+hist = skrub.var("hist_path").skb.apply_func(pd.read_csv)
 X = data.drop(columns="target", errors="ignore").skb.mark_as_X()
 y = data["target"].skb.mark_as_y()
-pred = X.skb.apply(
+X_join = X.join(hist, on="id", how="left")
+pred = X_join.skb.apply(
     StandardScaler()
 ).skb.apply(LogisticRegression(), y=y)
 ```
@@ -242,7 +237,7 @@ learner.predict(
 
 ::: {.fragment fragment-index=2}
 
-![](images/base_ex.svg)
+![](images/model_graph.svg)
 
 :::
 
@@ -251,37 +246,18 @@ learner.predict(
 
 :::
 
-## What have we seen so far?  {.smaller}
-- Data science is harder than what you learn in classes
-- A full ML pipeline involves preprocessing, feature engineering and model training
-- We want to learn a "state" (it's called machine **learning** after all), [**evaluate performance**]{.emph} and do so while avoiding [**data leakage**]{.emph}
-- [**Data Ops**]{.emph} are a framework that allows to build [**stateful pipelines**]{.emph} for
-[**arbitrary code and inputs**]{.emph}
 
 # Act 2: Dataset and problem
 
-## What are we here for? 
+## What are we here for?  {.smaller}
 - **The dataset**: World of Warcraft Avatar history Dataset [^1]
-  - ~35.6M timestamped player is active" lines (**heartbeats**). 
-
-- **The problem**: Predict whether a player will stop playing (will **churn**) on
-a given month, to implement some policy to retain them.
-
-[^1]: [Source](https://web.cs.wpi.edu/~claypool/mmsys-dataset/2011/wow/)
-
-## The problem {.smaller}
-- We are working with a subscription-based strategy where players pay a monthly fee to play the game. 
-- Some players eventually stop playing, and thus stop paying their subscription.
-
-::: {.callout}
-
-We want to predict which players are likely to churn in the next month, in
+  - World of Warcraft is a **subscription-based** online videogame.
+  - The dataset collects player activity over 2005-2009.
+- **The problem**: Some players eventually stop playing, and thus stop paying
+their subscription.
+  - A player **churns** if they have **no activity** for two full months. 
+  - We want to predict which players are likely to churn in the next month, in
 order to enact some measure to keep them from leaving. 
-
-A player **churns** if they have **no activity** for two full months. 
-
-:::
-
 
 ::: {.fragment}
 
@@ -291,6 +267,7 @@ A player **churns** if they have **no activity** for two full months.
 
 :::
 
+[^1]: [Source](https://web.cs.wpi.edu/~claypool/mmsys-dataset/2011/wow/)
 
 
 ## The game {.smaller}
@@ -299,7 +276,7 @@ A player **churns** if they have **no activity** for two full months.
 
 ::: {.column}
 
-- World of Warcraft (WoW) is a **subscription-based** MMORPG released in 2004 by
+- World of Warcraft (WoW) is MMORPG released in 2004 by
 Blizzard Entertainment. 
 - Players create **character avatars** to navigate the open game world
 and perform various activities. 
@@ -320,13 +297,7 @@ and perform various activities.
 
 ## World of Warcraft Avatar history {.smaller}
 
-
-::: {.columns}
-
-::: {.column}
-
 - ~35.6M timestamped "character is active" lines (**heartbeats**). 
-- Heartbeats are stored in txt files, grouped by day and quarter. 
 - Time range: 2005-12-31 / 2009-01-10 in the 
 **Taiwanese server**.
 - Two expansions are included in the range:
@@ -334,14 +305,16 @@ and perform various activities.
   - Wrath of the Lich King (November 2008).  
 
 
-:::
+## Raw data structure {.smaller}
+
+
+::: {.columns}
 
 ::: {.column}
 
-
+**Folder structure**
 
 ```
-# cut output of tree WoWAH
 WoWAH
 ├── 2006_01_03
 │   ├── 2006-01-01
@@ -356,27 +329,13 @@ WoWAH
 ├── ...
 ```
 
-:::
-
-:::
-
-[^1]: [Source](https://web.cs.wpi.edu/~claypool/mmsys-dataset/2011/wow/)
-
-
-## The dataset {.smaller}
-
-
-::: {.columns}
-
-::: {.column}
-
-- Training samples are plain text, with custom formatting.
-- A custom parser must be used to convert the samples and extract the correct dtypes.
 
 
 :::
 
 ::: {.column}
+
+**Content of a single log file**
 
 ```
 # head WoWAH/2006_01_03/2006-01-01/00-03-56.txt 
@@ -389,7 +348,7 @@ Persistent_Storage = {
 	[6] = "0, 12/31/05 23:59:52, 2,5, , 16, Orc, Hunter, The Barrens, yes, 0",
 	[7] = "0, 12/31/05 23:59:52, 2,6, , 18, Orc, Warlock, The Barrens, no, 0",
 	[8] = "0, 12/31/05 23:59:52, 2,7, , 17, Orc, Hunter, Silverpine Forest, yes, 0",
-
+...
 ```
 
 
@@ -418,14 +377,7 @@ More detail about feature engineering and model selection is available in the fu
 
 - `HistGradientBoostingClassifier` as the evaluation model
 - Month-by-month temporal CV
-- Hyperparameter tuning with Data Ops and Optuna
-
-::: {.callout-important}
-
-Model optimization is intentionally **not the focus** of this talk. 
-
-:::
-
+- Hyperparameter tuning with Data Ops
 
 
 ## Caveats
@@ -438,11 +390,6 @@ measure we decide to implement, so we can only try to **predict player behavior*
 # Act 3: The implementation
 
 
-## 
-- We won't be going over the detailed implementation.
-- The material is available in the repository. 
-
-
 ::: {.callout}
 
 The implementation involved a number of **pain points** that Data Ops simplified.
@@ -451,29 +398,13 @@ The implementation involved a number of **pain points** that Data Ops simplified
 
 
 
-## Pain point 1 - Data ingestion is part of the pipeline {.smaller}
+## Pain point 1 - Data preparation is part of the pipeline {.smaller}
 
-- Data is not in a clean format:
-  - Heartbeats are in text files scattered over hundreds of folders
-  - Logs need to be resampled to have (character, month) granularity
+- Data is not clean: heartbeats are in text files scattered over hundreds of folders
+rather than in a more manageable format. 
 - The same transformations (and all other **learned states**) need to be replayed
 on new data. 
 - Boilerplate code and pre-processing scripts are brittle and prone to errors.
-
-
-
-## Pain point 1 - Data preparation is part of the pipeline {.smaller}
-
-In our Data Op plan:
-
-1. The input dataset is a list of plaintext files
-2. The pipeline reads each file, removes bloat lines, parses each heartbeat
-3. Heartbeats are converted to a polars lazyframe to serve as `historical` for
-the rest of the pipeline
-4. Builds the churn dataset by aggregating the available data over player character
- and month
-
-The target is built **inside** of the pipeline. 
 
 
 ## Pain point 1 - Data preparation is part of the pipeline {.smaller}
@@ -481,54 +412,73 @@ The target is built **inside** of the pipeline.
 
 ::: {.columns}
 
-::: {.column}
+::: {.column width="60%"}
 
-- Data Ops bring data ingestion and processing into the pipeline. 
-- Preprocessing can vary depending on the specific use case. 
+**Building the pipeline**
+
+```{.python code-line-numbers="|2|3|5-7|9-10|12-13|14|15|"}
+def make_data_op():
+    raw_files = skrub.var("raw_files")
+    historical_data = raw_files.skb.apply_func(load, fraction=load_fraction)
+
+    user_month_has_played = historical_data.skb.apply_func(
+        build_churn_dataset
+    ).skb.set_name("query")
+    
+    X = user_month_has_played["char", "month"].skb.mark_as_X(cv=Splitter())
+    y = user_month_has_played["churn_next"].skb.mark_as_y()
+
+    feature_table = historical_data.skb.apply_func(build_feature_table)
+    encoded = feature_table.skb.apply(skrub.TableVectorizer())
+    data_op = encoded.skb.apply(HGB(), y=y)
+    return data_op
+
+```
 
 :::
 
-::: {.column}
+::: {.column width="40%"}
 
-```{.python code-line-numbers="|3-4,9-11|6-7,13-14"}
-import skrub
 
-def draft_loader():
-  return pd.read_csv("path/to/file.csv")
+::: {.fragment}
 
-def prod_loader():
-  return api.fetch().to_pandas()
 
-loader = skrub.var("loader", draft_loader, becomes_default=True)
-# build the DAG  
-learner = data_op.skb.make_learner(fitted=True)
 
-# Use a different loader to get production data
-learner.predict({"loader": prod_loader})
 
-# No changes needed by the learner!
 
+**Exporting the learner**
+
+```{.python}
+...
+data_op, X = make_data_op()
+learner = data_op.skb.make_learner()
+learner.fit(get_env("train"))
+
+unseen_env = get_env("unseen")
+predictions = learner.predict(unseen_env)
+...
 ```
 
 :::
 
 :::
 
+:::
 
 
 ## Pain point 2 — Leakage in temporal feature engineering {.smaller}
 
 - Features must only use data available at scoring time
 - Session detection and aggregation must be executed only on **data we have access to**
-- we are performing aggregations over different, time-aware splits
+- We are performing aggregations over different, time-aware splits
 
 
-## Pain point 2 — Cross-validation with irregular time splits {.smaller auto-animate="true"}
+## Pain point 3 — Cross-validation with irregular time splits {.smaller auto-animate="true"}
 
 ![](images/user_months_plot.png)
 
 
-## Pain point 2 — Cross-validation with irregular time splits {.smaller auto-animate="true"}
+## Pain point 3 — Cross-validation with irregular time splits {.smaller auto-animate="true"}
 
 
 ::: {.columns}
@@ -548,12 +498,12 @@ learner.predict({"loader": prod_loader})
 
 :::
 
-## Pain point 2 — Cross-validation with irregular time splits {.smaller auto-animate="true"}
+## Pain point 3 — Cross-validation with irregular time splits {.smaller auto-animate="true"}
 
 
 ::: {.columns}
 
-::: {.column width=40%}
+::: {.column width=45%}
 
 
 - Data Ops natively support  **custom splitters** for splitting data in the DAG.
@@ -563,7 +513,7 @@ learner.predict({"loader": prod_loader})
 
 :::
 
-::: {.column width=60%}
+::: {.column width=55%}
 
 
 ```{.python}
@@ -587,14 +537,14 @@ class Splitter:
 :::
 
 
-## Pain point 3 — Tuning wrangling choices, not just model knobs {.smaller}
+## Pain point 4 — Tuning wrangling choices, not just model knobs {.smaller}
 
-- Model choices are not limited to model hyperparameters: `session_gap` (15/30/60 min), include location features?, add Gini?, which lags?
+- Model choices are not limited to model hyperparameters: `session_gap` (15/30/60 min), include location features?, which lags?
 - These are **data pipeline decisions**, with big performance and runtime impact
 - Pipeline decisions **modify the pipeline itself**, and regular hyperparameter tuning does not work
 
 
-## Pain point 3 — Tuning wrangling choices, not just model knobs {.smaller}
+## Pain point 4 — Tuning wrangling choices, not just model knobs {.smaller}
 - **With DataOps** choices can be dropped inline, where the value is used — `choose_from`, `choose_bool`, `choose_float(log=True)`
 - One call to `skb.make_randomized_search(backend="optuna", ...)` turns the whole DAG into a search 
 
@@ -616,20 +566,37 @@ class Splitter:
  pred = X.skb.apply(LogisticRegression())</code></pre>
 ```
 
-## Pain point 4 - Debugging and inspecting a pipeline
+## Pain point 5 - Debugging and inspecting a pipeline
 - Inspecting a regular pipeline is complex and requires programmatic access
 - Once deployed, it is hard to maintain a trained model ("why was this step needed?", 
 "where is the source code?")
 - The result of intermediate steps is hard to access
 
-## Pain point 4 - Debugging and inspecting a pipeline
+## Pain point 5 - Debugging and inspecting a pipeline
 - Data Ops reports provide rich information about each node
 - The source code used to generate a Data Op is bundled with it
 - When a preview or environment is provided, intermediate results can be shown
 
-## Pain point 4 - Debugging and inspecting a pipeline
+## Pain point 5 - Debugging and inspecting a pipeline
 
 <iframe src="reports/execution_report/index.html" width="100%" height="480px" style="border: 1px solid #ccc; border-radius: 4px;"> </iframe>
 
 
-# 
+# Conclusions
+
+::: {.columns}
+
+::: {.column}
+
+...
+
+:::
+
+::: {.column}
+
+TODO Repo QR code
+
+:::
+
+:::
+
