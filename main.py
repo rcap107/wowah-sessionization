@@ -59,7 +59,7 @@ RAW_DATA_ROOT = "data/raw/WoWAH"
 # (it stops on January 10th).
 HISTORICAL_END = datetime.strptime("2008-10-31", "%Y-%m-%d")
 
-# "unseen" is never used while fitting: it is a hard cutoff on the parsing of 
+# "unseen" is never used while fitting: it is a hard cutoff on the parsing of
 # the raw files, so that the pipeline only evaluates on files it has never seen
 # before.
 # It starts in October too (so that
@@ -412,7 +412,11 @@ if __name__ == "__main__":
         print(predictions)
     else:
         results, data_op = evaluate(args.env, load_fraction=args.fraction)
-        report = data_op.skb.report(environment=get_env(args.env))
+        report = data_op.skb.report(
+            environment=get_env(args.env),
+            output_dir="reports/execution_report",
+            overwrite=True,
+        )
     # results = cross_validate(args.env, load_fraction=args.fraction)
     # print(results)
 
