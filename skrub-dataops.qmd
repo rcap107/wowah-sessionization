@@ -34,6 +34,7 @@ Machine learning on tabular data
 
 **Textbook ML**
 
+
 <br>
 
 $X \in \mathbb{R}^{n \times p},\ y \in \mathbb{R}^n$
@@ -41,6 +42,9 @@ $X \in \mathbb{R}^{n \times p},\ y \in \mathbb{R}^n$
 $\hat{y} = f_{\hat{\theta}}(X)$
 
 <br>
+
+::: {.fragment}
+
 
 ```{=html}
 <pre><code class="language-python">estimator = <span style="outline: 3px transparent; outline-offset: 1px;">TabICLRegressor()</span>
@@ -50,12 +54,24 @@ cross_validate(estimator, X, y)
 estimator.fit(X_train, y_train)
 estimator.predict(X_new)</code></pre>
 ```
+
+:::
+
+
 :::
 
 ::: {.column width="55%"}
+
+
+::: {.fragment}
+
 **Data-Science Practice**
 
 ![](images/electricity-load-graph.svg)
+
+:::
+
+
 :::
 
 ::::
@@ -129,6 +145,7 @@ estimator.predict(X_new)</code></pre>
 ::::
 
 
+
 ## 
 To build a ML pipeline, we need to:
 
@@ -152,9 +169,8 @@ How do we deal with that?
 ### DataOps
 
 - All the goodies of the scikit-learn framework: `fit()` & `predict()`, cross-validation, hyperparameter tuning, serialization.
-- Without the usual restrictions & while supporting **arbitrary data processing**.
-  [Multiple inputs, feature & target construction, filtering samples, dynamic arguments for CV splitters & scorers, etc.]{style="font-size: 0.8em; color: gray;"}
-- And more: Optuna integration, dynamic previews, pipeline inspection, ...
+- Without the usual restrictions & while supporting **arbitrary data processing**: multiple inputs, filtering samples, dynamic arguments ...
+- And more: Optuna integration, pipeline inspection, ...
 :::
 
 ## Basic example {.smaller auto-animate="true"}
@@ -235,37 +251,26 @@ learner.predict(
 
 :::
 
-
-
+## What have we seen so far?  {.smaller}
+- Data science is harder than what you learn in classes
+- A full ML pipeline involves preprocessing, feature engineering and model training
+- We want to learn a "state" (it's called machine **learning** after all), [**evaluate performance**]{.emph} and do so while avoiding [**data leakage**]{.emph}
+- [**Data Ops**]{.emph} are a framework that allows to build [**stateful pipelines**]{.emph} for
+[**arbitrary code and inputs**]{.emph}
 
 # Act 2: Dataset and problem
 
-## The game {.smaller}
+## What are we here for? 
+- **The dataset**: World of Warcraft Avatar history Dataset [^1]
+  - ~35.6M timestamped player is active" lines (**heartbeats**). 
 
-::: {.columns}
+- **The problem**: Predict whether a player will stop playing (will **churn**) on
+a given month, to implement some policy to retain them.
 
-::: {.column}
-
-- World of Warcraft (WoW) is a **subscription-based** MMORPG released in 2004 by
-Blizzard Entertainment. 
-- In WoW, players chreate **character avatars** to navigate the open game world
-and perform various activities. 
-- Players level up their caracters to make them more powerful. 
-- Player characters belong to a **faction** (Alliance or Horde), have a **race** 
-and a **class**.
-
-:::
-
-::: {.column}
-
-![World of Warcraft original cover](images/World_of_Warcraft.png)
-
-:::
-
-:::
+[^1]: [Source](https://web.cs.wpi.edu/~claypool/mmsys-dataset/2011/wow/)
 
 ## The problem {.smaller}
-- Since WoW is subscription-based, players pay a monthly fee to play the game. 
+- We are working with a subscription-based strategy where players pay a monthly fee to play the game. 
 - Some players eventually stop playing, and thus stop paying their subscription.
 
 ::: {.callout}
@@ -288,23 +293,45 @@ A player **churns** if they have **no activity** for two full months.
 
 
 
+## The game {.smaller}
 
-## The dataset {.smaller}
+::: {.columns}
+
+::: {.column}
+
+- World of Warcraft (WoW) is a **subscription-based** MMORPG released in 2004 by
+Blizzard Entertainment. 
+- Players create **character avatars** to navigate the open game world
+and perform various activities. 
+- Players level up their caracters to make them more powerful. 
+- A single player may have **multiple avatars**. 
+
+:::
+
+::: {.column}
+
+![World of Warcraft original cover](images/World_of_Warcraft.png)
+
+:::
+
+:::
+
+
+
+## World of Warcraft Avatar history {.smaller}
 
 
 ::: {.columns}
 
 ::: {.column}
 
-
-- **Dataset**: World of Warcraft Avatar history Dataset [^1]
 - ~35.6M timestamped "character is active" lines (**heartbeats**). 
 - Heartbeats are stored in txt files, grouped by day and quarter. 
 - Time range: 2005-12-31 / 2009-01-10 in the 
 **Taiwanese server**.
 - Two expansions are included in the range:
-  - The Burning Crusade (April 3, 2007)
-  - Wrath of the Lich King (November 18, 2008).  
+  - The Burning Crusade (April 2007)
+  - Wrath of the Lich King (November 2008).  
 
 
 :::
@@ -370,16 +397,8 @@ Persistent_Storage = {
 
 :::
 
-## The datasets: some statistics {.smaller}
-
-![](reports/exploration/levels_over_time.png)
-
-
 ## The datasets: some statistics {.smaller auto-animate="true"}
 ![](reports/exploration/characters_by_month.png)
-
-## The dataset: `TableReport`
-
 
 
 ## Feature engineering {.smaller}
@@ -418,24 +437,58 @@ measure we decide to implement, so we can only try to **predict player behavior*
 
 # Act 3: The implementation
 
+
+## 
+- We won't be going over the detailed implementation.
+- The material is available in the repository. 
+
+
+::: {.callout}
+
+The implementation involved a number of **pain points** that Data Ops simplified.
+
+:::
+
+
+
 ## Pain point 1 - Data ingestion is part of the pipeline {.smaller}
 
-
-
-::: {.columns}
-
-::: {.column}
 - Data is not in a clean format:
   - Heartbeats are in text files scattered over hundreds of folders
   - Logs need to be resampled to have (character, month) granularity
 - The same transformations (and all other **learned states**) need to be replayed
 on new data. 
-- Glue code and pre-processing scripts are brittle and prone to errors.
+- Boilerplate code and pre-processing scripts are brittle and prone to errors.
+
+
+
+## Pain point 1 - Data preparation is part of the pipeline {.smaller}
+
+In our Data Op plan:
+
+1. The input dataset is a list of plaintext files
+2. The pipeline reads each file, removes bloat lines, parses each heartbeat
+3. Heartbeats are converted to a polars lazyframe to serve as `historical` for
+the rest of the pipeline
+4. Builds the churn dataset by aggregating the available data over player character
+ and month
+
+The target is built **inside** of the pipeline. 
+
+
+## Pain point 1 - Data preparation is part of the pipeline {.smaller}
+
+
+::: {.columns}
+
+::: {.column}
+
+- Data Ops bring data ingestion and processing into the pipeline. 
+- Preprocessing can vary depending on the specific use case. 
 
 :::
 
 ::: {.column}
-
 
 ```{.python code-line-numbers="|3-4,9-11|6-7,13-14"}
 import skrub
@@ -462,31 +515,13 @@ learner.predict({"loader": prod_loader})
 :::
 
 
-## Pain point 1 - Data preparation is part of the pipeline {.smaller}
-
-In our Data Op plan:
-
-1. The input dataset is a list of plaintext files
-2. The pipeline reads each file, removes bloat lines, parses each heartbeat
-3. Heartbeats are converted to a polars lazyframe to serve as `historical` for
-the rest of the pipeline
-4. Builds the churn dataset by aggregating the available data over player character
- and month
-
-The target is built **inside** of the pipeline. 
-
 
 ## Pain point 2 — Leakage in temporal feature engineering {.smaller}
 
 - Features must only use data available at scoring time
-- Session detection and aggregations are **stateful w.r.t. time**: doing them once on the full table leaks the future
-- sklearn `Pipeline` cannot do this: `X`/`y` must exist **before** the pipeline starts, and wrangling lives outside
+- Session detection and aggregation must be executed only on **data we have access to**
 - we are performing aggregations over different, time-aware splits
-- In the example: `X` and `y` are cut **inside** the plan (`mark_as_X` / `mark_as_y`), so each CV fold re-runs the feature code on training data only
 
-::: {.notes}
-This is the central difficulty of the example (`main.py:90-186`). If the target month is April, features may only be built from February data and earlier (`main.py:136-143`). The skrub sessionization doc (`modules/multi_column_operations/sessionization.rst`) carries a warning box saying aggregation leaks unless it is re-fit per fold — either wrapped in an sklearn transformer or done "with the skrub Data Ops framework". DataOps bind the whole wrangling DAG to the prediction, so `skb.cross_validate()` re-executes the leakage-safe steps inside every fold automatically, instead of the user hand-rolling fold-by-fold feature construction.
-:::
 
 ## Pain point 2 — Cross-validation with irregular time splits {.smaller auto-animate="true"}
 
@@ -521,9 +556,10 @@ This is the central difficulty of the example (`main.py:90-186`). If the target 
 ::: {.column width=40%}
 
 
-- Write a **custom splitter** that uses custom dataframe logic to select the samples
-- With DataOps plug it in `skb.mark_as_X(cv=Splitter())`
-- Now, the splitter is honored by `cross_validate`, `train_test_split`, randomized search, and scoring
+- Data Ops natively support  **custom splitters** for splitting data in the DAG.
+- Custom splitters can use custom dataframe logic to select the samples
+- Splitters plugged in `skb.mark_as_X(cv=Splitter())` are honored by 
+`cross_validate`, `train_test_split`, randomized search, and scoring
 
 :::
 
@@ -555,10 +591,13 @@ class Splitter:
 
 - Model choices are not limited to model hyperparameters: `session_gap` (15/30/60 min), include location features?, add Gini?, which lags?
 - These are **data pipeline decisions**, with big performance and runtime impact
+- Pipeline decisions **modify the pipeline itself**, and regular hyperparameter tuning does not work
+
+
+## Pain point 3 — Tuning wrangling choices, not just model knobs {.smaller}
 - **With DataOps** choices can be dropped inline, where the value is used — `choose_from`, `choose_bool`, `choose_float(log=True)`
 - One call to `skb.make_randomized_search(backend="optuna", ...)` turns the whole DAG into a search 
 
-## Pain point 3 — Tuning wrangling choices, not just model knobs {.smaller}
 ```{=html}
 <ul style="font-size: 0.8em;">
 <li>Replace any value with a choice:</li>
@@ -569,12 +608,6 @@ class Splitter:
 <span style="color: #c00; background-color: #fff0f0;">-    LogisticRegression(<span style="background-color: #f9a0a0;">C=1.0</span>),</span>
 <span style="color: #080; background-color: #f0fff0;">+    LogisticRegression(<span style="background-color: #9be99b;">C=skrub.choose_float(0.1, 10.0, log=True)</span>),</span>
      y=y)</code></pre>
-<ul style="font-size: 0.8em;">
-<li>Use grid search or randomized search (possibly backed by Optuna).</li>
-</ul>
-<pre style="font-size: 0.55em; background-color: #f5f5f5; padding: 0.6em 1em; margin: 0.8em 0;"><code style="background-color: inherit;"><span style="color: #c00; background-color: #fff0f0;">-learner = pred.skb.<span style="background-color: #f9a0a0;">make_learner</span>().fit({...})</span>
-<span style="color: #080; background-color: #f0fff0;">+learner = pred.skb.<span style="background-color: #9be99b;">make_randomized_search</span>().fit({...})</span></code></pre>
-<ul style="font-size: 0.8em;">
 <li>Tune data pipeline decisions, not only hyperparameters</li>
 </ul>
 <pre style="font-size: 0.55em; background-color: #f5f5f5; padding: 0.6em 1em; margin: 0.8em 0;"><code style="background-color: inherit;">X_enc = X.skb.apply_func(build_features,
@@ -583,20 +616,20 @@ class Splitter:
  pred = X.skb.apply(LogisticRegression())</code></pre>
 ```
 
-## Pain point 5 — Debugging a complex DAG
+## Pain point 4 - Debugging and inspecting a pipeline
+- Inspecting a regular pipeline is complex and requires programmatic access
+- Once deployed, it is hard to maintain a trained model ("why was this step needed?", 
+"where is the source code?")
+- The result of intermediate steps is hard to access
 
-- Data Ops work **lazily**: they need to evaluate all nodes in the DAG to run
-- Eager **previews**: pass a value to `var()` and every node shows its result immediately
-- `skb.report()` emits an HTML report: every node's name, description, predecessors, fitted estimator, and **data preview**
-- On failure, the report shows the offending node and the traceback
+## Pain point 4 - Debugging and inspecting a pipeline
+- Data Ops reports provide rich information about each node
+- The source code used to generate a Data Op is bundled with it
+- When a preview or environment is provided, intermediate results can be shown
 
-## Pain point 5 - Debugging a complex DAG
+## Pain point 4 - Debugging and inspecting a pipeline
 
 <iframe src="reports/execution_report/index.html" width="100%" height="480px" style="border: 1px solid #ccc; border-radius: 4px;"> </iframe>
 
-## Pain point 7 — Stay in your dataframe API inside the plan {.smaller}
 
-- Frameworks usually force you to leave Polars once you enter "pipeline land"
-- DataOps are **transparent**: Polars methods are called directly on DataOps (`historical_data.with_columns(...)`, `.collect()`, indexing, joins)
-- Python control flow (`for month in ...`) must be put in `@deferred` / `apply_func` functions
-- Deferred functions appear as **one graph node** — good for reports and caching 
+# 

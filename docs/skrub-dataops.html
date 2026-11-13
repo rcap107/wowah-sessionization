@@ -229,15 +229,19 @@
 <p><span class="math inline">\(X \in \mathbb{R}^{n \times p},\ y \in \mathbb{R}^n\)</span></p>
 <p><span class="math inline">\(\hat{y} = f_{\hat{\theta}}(X)\)</span></p>
 <p><br></p>
+<div class="fragment">
 <pre><code class="language-python">estimator = <span style="outline: 3px transparent; outline-offset: 1px;">TabICLRegressor()</span>
 
 cross_validate(estimator, X, y)
 
 estimator.fit(X_train, y_train)
 estimator.predict(X_new)</code></pre>
+</div>
 </div><div class="column" style="width:55%;">
+<div class="fragment">
 <p><strong>Data-Science Practice</strong></p>
 <p><img data-src="images/electricity-load-graph.svg"></p>
+</div>
 </div></div>
 </section>
 <section id="section-1" class="slide level2 smaller">
@@ -309,8 +313,8 @@ estimator.predict(X_new)</code></pre>
 <div class="callout-content">
 <ul>
 <li>All the goodies of the scikit-learn framework: <code>fit()</code> &amp; <code>predict()</code>, cross-validation, hyperparameter tuning, serialization.</li>
-<li>Without the usual restrictions &amp; while supporting <strong>arbitrary data processing</strong>. <span style="font-size: 0.8em; color: gray;">Multiple inputs, feature &amp; target construction, filtering samples, dynamic arguments for CV splitters &amp; scorers, etc.</span></li>
-<li>And more: Optuna integration, dynamic previews, pipeline inspection, …</li>
+<li>Without the usual restrictions &amp; while supporting <strong>arbitrary data processing</strong>: multiple inputs, filtering samples, dynamic arguments …</li>
+<li>And more: Optuna integration, pipeline inspection, …</li>
 </ul>
 </div>
 </div>
@@ -352,35 +356,35 @@ estimator.predict(X_new)</code></pre>
 <p><img data-src="images/base_ex.svg"></p>
 </div>
 </div></div>
+</section>
+<section id="what-have-we-seen-so-far" class="slide level2 smaller">
+<h2>What have we seen so far?</h2>
+<ul>
+<li>Data science is harder than what you learn in classes</li>
+<li>A full ML pipeline involves preprocessing, feature engineering and model training</li>
+<li>We want to learn a “state” (it’s called machine <strong>learning</strong> after all), <span class="emph"><strong>evaluate performance</strong></span> and do so while avoiding <span class="emph"><strong>data leakage</strong></span></li>
+<li><span class="emph"><strong>Data Ops</strong></span> are a framework that allows to build <span class="emph"><strong>stateful pipelines</strong></span> for <span class="emph"><strong>arbitrary code and inputs</strong></span></li>
+</ul>
 </section></section>
 <section>
 <section id="act-2-dataset-and-problem" class="title-slide slide level1 center">
 <h1>Act 2: Dataset and problem</h1>
 
 </section>
-<section id="the-game" class="slide level2 smaller">
-<h2>The game</h2>
-<div class="columns">
-<div class="column">
+<section id="what-are-we-here-for" class="slide level2">
+<h2>What are we here for?</h2>
 <ul>
-<li>World of Warcraft (WoW) is a <strong>subscription-based</strong> MMORPG released in 2004 by Blizzard Entertainment.</li>
-<li>In WoW, players chreate <strong>character avatars</strong> to navigate the open game world and perform various activities.</li>
-<li>Players level up their caracters to make them more powerful.</li>
-<li>Player characters belong to a <strong>faction</strong> (Alliance or Horde), have a <strong>race</strong> and a <strong>class</strong>.</li>
+<li><strong>The dataset</strong>: World of Warcraft Avatar history Dataset <sup>1</sup>
+<ul>
+<li>~35.6M timestamped player is active” lines (<strong>heartbeats</strong>).</li>
+</ul></li>
+<li><strong>The problem</strong>: Predict whether a player will stop playing (will <strong>churn</strong>) on a given month, to implement some policy to retain them.</li>
 </ul>
-</div><div class="column">
-<div class="quarto-figure quarto-figure-center">
-<figure>
-<p><img data-src="images/World_of_Warcraft.png"></p>
-<figcaption>World of Warcraft original cover</figcaption>
-</figure>
-</div>
-</div></div>
-</section>
+<aside><ol class="aside-footnotes"><li id="fn1"><p><a href="https://web.cs.wpi.edu/~claypool/mmsys-dataset/2011/wow/">Source</a></p></li></ol></aside></section>
 <section id="the-problem" class="slide level2 smaller">
 <h2>The problem</h2>
 <ul>
-<li>Since WoW is subscription-based, players pay a monthly fee to play the game.</li>
+<li>We are working with a subscription-based strategy where players pay a monthly fee to play the game.</li>
 <li>Some players eventually stop playing, and thus stop paying their subscription.</li>
 </ul>
 <div class="callout callout-none no-icon callout-style-simple">
@@ -398,19 +402,37 @@ estimator.predict(X_new)</code></pre>
 </ul>
 </div>
 </section>
-<section id="the-dataset" class="slide level2 smaller">
-<h2>The dataset</h2>
+<section id="the-game" class="slide level2 smaller">
+<h2>The game</h2>
 <div class="columns">
 <div class="column">
 <ul>
-<li><strong>Dataset</strong>: World of Warcraft Avatar history Dataset <sup>1</sup></li>
+<li>World of Warcraft (WoW) is a <strong>subscription-based</strong> MMORPG released in 2004 by Blizzard Entertainment.</li>
+<li>Players create <strong>character avatars</strong> to navigate the open game world and perform various activities.</li>
+<li>Players level up their caracters to make them more powerful.</li>
+<li>A single player may have <strong>multiple avatars</strong>.</li>
+</ul>
+</div><div class="column">
+<div class="quarto-figure quarto-figure-center">
+<figure>
+<p><img data-src="images/World_of_Warcraft.png"></p>
+<figcaption>World of Warcraft original cover</figcaption>
+</figure>
+</div>
+</div></div>
+</section>
+<section id="world-of-warcraft-avatar-history" class="slide level2 smaller">
+<h2>World of Warcraft Avatar history</h2>
+<div class="columns">
+<div class="column">
+<ul>
 <li>~35.6M timestamped “character is active” lines (<strong>heartbeats</strong>).</li>
 <li>Heartbeats are stored in txt files, grouped by day and quarter.</li>
 <li>Time range: 2005-12-31 / 2009-01-10 in the <strong>Taiwanese server</strong>.</li>
 <li>Two expansions are included in the range:
 <ul>
-<li>The Burning Crusade (April 3, 2007)</li>
-<li>Wrath of the Lich King (November 18, 2008).</li>
+<li>The Burning Crusade (April 2007)</li>
+<li>Wrath of the Lich King (November 2008).</li>
 </ul></li>
 </ul>
 </div><div class="column">
@@ -428,8 +450,8 @@ WoWAH
 ├── 2006_04_06
 ├── ...</code></pre>
 </div></div>
-<aside><ol class="aside-footnotes"><li id="fn1"><p><a href="https://web.cs.wpi.edu/~claypool/mmsys-dataset/2011/wow/">Source</a></p></li></ol></aside></section>
-<section id="the-dataset-1" class="slide level2 smaller">
+</section>
+<section id="the-dataset" class="slide level2 smaller">
 <h2>The dataset</h2>
 <div class="columns">
 <div class="column">
@@ -451,17 +473,10 @@ Persistent_Storage = {
 </code></pre>
 </div></div>
 </section>
-<section id="the-datasets-some-statistics" class="slide level2 smaller">
-<h2>The datasets: some statistics</h2>
-
-<img data-src="reports/exploration/levels_over_time.png" class="r-stretch"></section>
-<section id="the-datasets-some-statistics-1" class="slide level2 smaller" data-auto-animate="true">
+<section id="the-datasets-some-statistics" class="slide level2 smaller" data-auto-animate="true">
 <h2 data-id="quarto-animate-title">The datasets: some statistics</h2>
 
 <img data-src="reports/exploration/characters_by_month.png" class="r-stretch"></section>
-<section id="the-dataset-tablereport" class="slide level2">
-<h2>The dataset: <code>TableReport</code></h2>
-</section>
 <section id="feature-engineering" class="slide level2 smaller">
 <h2>Feature engineering</h2>
 <ul>
@@ -515,10 +530,22 @@ Persistent_Storage = {
 <h1>Act 3: The implementation</h1>
 
 </section>
+<section id="section-4" class="slide level2">
+<h2></h2>
+<ul>
+<li>We won’t be going over the detailed implementation.</li>
+<li>The material is available in the repository.</li>
+</ul>
+<div class="callout callout-none no-icon callout-style-simple">
+<div class="callout-body">
+<div class="callout-content">
+<p>The implementation involved a number of <strong>pain points</strong> that Data Ops simplified.</p>
+</div>
+</div>
+</div>
+</section>
 <section id="pain-point-1---data-ingestion-is-part-of-the-pipeline" class="slide level2 smaller">
 <h2>Pain point 1 - Data ingestion is part of the pipeline</h2>
-<div class="columns">
-<div class="column">
 <ul>
 <li>Data is not in a clean format:
 <ul>
@@ -526,7 +553,27 @@ Persistent_Storage = {
 <li>Logs need to be resampled to have (character, month) granularity</li>
 </ul></li>
 <li>The same transformations (and all other <strong>learned states</strong>) need to be replayed on new data.</li>
-<li>Glue code and pre-processing scripts are brittle and prone to errors.</li>
+<li>Boilerplate code and pre-processing scripts are brittle and prone to errors.</li>
+</ul>
+</section>
+<section id="pain-point-1---data-preparation-is-part-of-the-pipeline" class="slide level2 smaller">
+<h2>Pain point 1 - Data preparation is part of the pipeline</h2>
+<p>In our Data Op plan:</p>
+<ol type="1">
+<li>The input dataset is a list of plaintext files</li>
+<li>The pipeline reads each file, removes bloat lines, parses each heartbeat</li>
+<li>Heartbeats are converted to a polars lazyframe to serve as <code>historical</code> for the rest of the pipeline</li>
+<li>Builds the churn dataset by aggregating the available data over player character and month</li>
+</ol>
+<p>The target is built <strong>inside</strong> of the pipeline.</p>
+</section>
+<section id="pain-point-1---data-preparation-is-part-of-the-pipeline-1" class="slide level2 smaller">
+<h2>Pain point 1 - Data preparation is part of the pipeline</h2>
+<div class="columns">
+<div class="column">
+<ul>
+<li>Data Ops bring data ingestion and processing into the pipeline.</li>
+<li>Preprocessing can vary depending on the specific use case.</li>
 </ul>
 </div><div class="column">
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6" data-code-line-numbers="|3-4,9-11|6-7,13-14"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a aria-label="1"></a><span class="im">import</span> skrub</span>
@@ -547,40 +594,13 @@ Persistent_Storage = {
 <span id="cb6-16"><a aria-label="16"></a><span class="co"># No changes needed by the learner!</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div></div>
 </section>
-<section id="pain-point-1---data-preparation-is-part-of-the-pipeline" class="slide level2 smaller">
-<h2>Pain point 1 - Data preparation is part of the pipeline</h2>
-<p>In our Data Op plan:</p>
-<ol type="1">
-<li>The input dataset is a list of plaintext files</li>
-<li>The pipeline reads each file, removes bloat lines, parses each heartbeat</li>
-<li>Heartbeats are converted to a polars lazyframe to serve as <code>historical</code> for the rest of the pipeline</li>
-<li>Builds the churn dataset by aggregating the available data over player character and month</li>
-</ol>
-<p>The target is built <strong>inside</strong> of the pipeline.</p>
-</section>
 <section id="pain-point-2-leakage-in-temporal-feature-engineering" class="slide level2 smaller">
 <h2>Pain point 2 — Leakage in temporal feature engineering</h2>
 <ul>
 <li>Features must only use data available at scoring time</li>
-<li>Session detection and aggregations are <strong>stateful w.r.t. time</strong>: doing them once on the full table leaks the future</li>
-<li>sklearn <code>Pipeline</code> cannot do this: <code>X</code>/<code>y</code> must exist <strong>before</strong> the pipeline starts, and wrangling lives outside</li>
-<li>we are performing aggregations Over</li>
-<li>skrub docs warn explicitly: <em>aggregation can introduce data leakage</em> → wrap it in the DataOps plan</li>
-<li>In the example: <code>X</code> and <code>y</code> are cut <strong>inside</strong> the plan (<code>mark_as_X</code> / <code>mark_as_y</code>), so each CV fold re-runs the feature code on training data only</li>
+<li>Session detection and aggregation must be executed only on <strong>data we have access to</strong></li>
+<li>we are performing aggregations over different, time-aware splits</li>
 </ul>
-<aside class="notes">
-<p>This is the central difficulty of the example (<code>main.py:90-186</code>). If the target month is April, features may only be built from February data and earlier (<code>main.py:136-143</code>). The skrub sessionization doc (<code>modules/multi_column_operations/sessionization.rst</code>) carries a warning box saying aggregation leaks unless it is re-fit per fold — either wrapped in an sklearn transformer or done “with the skrub Data Ops framework”. DataOps bind the whole wrangling DAG to the prediction, so <code>skb.cross_validate()</code> re-executes the leakage-safe steps inside every fold automatically, instead of the user hand-rolling fold-by-fold feature construction.</p>
-<style type="text/css">
-        span.MJX_Assistive_MathML {
-          position:absolute!important;
-          clip: rect(1px, 1px, 1px, 1px);
-          padding: 1px 0 0 0!important;
-          border: 0!important;
-          height: 1px!important;
-          width: 1px!important;
-          overflow: hidden!important;
-          display:block!important;
-      }</style></aside>
 </section>
 <section id="pain-point-2-cross-validation-with-irregular-time-splits" class="slide level2 smaller" data-auto-animate="true">
 <h2 data-id="quarto-animate-title">Pain point 2 — Cross-validation with irregular time splits</h2>
@@ -603,9 +623,9 @@ Persistent_Storage = {
 <div class="columns">
 <div class="column" style="width:40%;">
 <ul>
-<li>Write a <strong>custom splitter</strong> that uses custom dataframe logic to select the samples</li>
-<li>With DataOps plug it in <code>skb.mark_as_X(cv=Splitter())</code></li>
-<li>Now, the splitter is honored by <code>cross_validate</code>, <code>train_test_split</code>, randomized search, and scoring</li>
+<li>Data Ops natively support <strong>custom splitters</strong> for splitting data in the DAG.</li>
+<li>Custom splitters can use custom dataframe logic to select the samples</li>
+<li>Splitters plugged in <code>skb.mark_as_X(cv=Splitter())</code> are honored by <code>cross_validate</code>, <code>train_test_split</code>, randomized search, and scoring</li>
 </ul>
 </div><div class="column" style="width:60%;">
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy" data-id="quarto-animate-code"><code class="sourceCode python hljs"><span id="cb7-1" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Splitter:</span>
@@ -628,12 +648,15 @@ Persistent_Storage = {
 <ul>
 <li>Model choices are not limited to model hyperparameters: <code>session_gap</code> (15/30/60 min), include location features?, add Gini?, which lags?</li>
 <li>These are <strong>data pipeline decisions</strong>, with big performance and runtime impact</li>
-<li><strong>With DataOps</strong> choices can be dropped inline, where the value is used — <code>choose_from</code>, <code>choose_bool</code>, <code>choose_float(log=True)</code></li>
-<li>One call to <code>skb.make_randomized_search(backend="optuna", ...)</code> turns the whole DAG into a search</li>
+<li>Pipeline decisions <strong>modify the pipeline itself</strong>, and regular hyperparameter tuning does not work</li>
 </ul>
 </section>
 <section id="pain-point-3-tuning-wrangling-choices-not-just-model-knobs-1" class="slide level2 smaller">
 <h2>Pain point 3 — Tuning wrangling choices, not just model knobs</h2>
+<ul>
+<li><strong>With DataOps</strong> choices can be dropped inline, where the value is used — <code>choose_from</code>, <code>choose_bool</code>, <code>choose_float(log=True)</code></li>
+<li>One call to <code>skb.make_randomized_search(backend="optuna", ...)</code> turns the whole DAG into a search</li>
+</ul>
 <ul style="font-size: 0.8em;">
 <li>Replace any value with a choice:</li>
 </ul>
@@ -643,44 +666,40 @@ Persistent_Storage = {
 <span style="color: #c00; background-color: #fff0f0;">-    LogisticRegression(<span style="background-color: #f9a0a0;">C=1.0</span>),</span>
 <span style="color: #080; background-color: #f0fff0;">+    LogisticRegression(<span style="background-color: #9be99b;">C=skrub.choose_float(0.1, 10.0, log=True)</span>),</span>
      y=y)</code></pre>
-<ul style="font-size: 0.8em;">
-<li>Use grid search or randomized search (possibly backed by Optuna).</li>
-</ul>
-<pre style="font-size: 0.55em; background-color: #f5f5f5; padding: 0.6em 1em; margin: 0.8em 0;"><code style="background-color: inherit;"><span style="color: #c00; background-color: #fff0f0;">-learner = pred.skb.<span style="background-color: #f9a0a0;">make_learner</span>().fit({...})</span>
-<span style="color: #080; background-color: #f0fff0;">+learner = pred.skb.<span style="background-color: #9be99b;">make_randomized_search</span>().fit({...})</span></code></pre>
-<ul style="font-size: 0.8em;">
 <li>Tune data pipeline decisions, not only hyperparameters</li>
-</ul>
+
 <pre style="font-size: 0.55em; background-color: #f5f5f5; padding: 0.6em 1em; margin: 0.8em 0;"><code style="background-color: inherit;">X_enc = X.skb.apply_func(build_features,
 <span style="color: #080; background-color: #f0fff0;">+  additional_features=<span style="background-color: #9be99b;">skrub.choose_bool()</span></span>
  )
  pred = X.skb.apply(LogisticRegression())</code></pre>
 </section>
-<section id="pain-point-5-debugging-a-complex-dag" class="slide level2">
-<h2>Pain point 5 — Debugging a complex DAG</h2>
+<section id="pain-point-4---debugging-and-inspecting-a-pipeline" class="slide level2">
+<h2>Pain point 4 - Debugging and inspecting a pipeline</h2>
 <ul>
-<li>Data Ops work <strong>lazily</strong>: they need to evaluate all nodes in the DAG to run</li>
-<li>Eager <strong>previews</strong>: pass a value to <code>var()</code> and every node shows its result immediately</li>
-<li><code>skb.report()</code> emits an HTML report: every node’s name, description, predecessors, fitted estimator, and <strong>data preview</strong></li>
-<li>On failure, the report shows the offending node and the traceback</li>
+<li>Inspecting a regular pipeline is complex and requires programmatic access</li>
+<li>Once deployed, it is hard to maintain a trained model (“why was this step needed?”, “where is the source code?”)</li>
+<li>The result of intermediate steps is hard to access</li>
 </ul>
 </section>
-<section id="pain-point-5---debugging-a-complex-dag" class="slide level2">
-<h2>Pain point 5 - Debugging a complex DAG</h2>
+<section id="pain-point-4---debugging-and-inspecting-a-pipeline-1" class="slide level2">
+<h2>Pain point 4 - Debugging and inspecting a pipeline</h2>
+<ul>
+<li>Data Ops reports provide rich information about each node</li>
+<li>The source code used to generate a Data Op is bundled with it</li>
+<li>When a preview or environment is provided, intermediate results can be shown</li>
+</ul>
+</section>
+<section id="pain-point-4---debugging-and-inspecting-a-pipeline-2" class="slide level2">
+<h2>Pain point 4 - Debugging and inspecting a pipeline</h2>
 <iframe src="reports/execution_report/index.html" width="100%" height="480px" style="border: 1px solid #ccc; border-radius: 4px;">
 </iframe>
-</section>
-<section id="pain-point-7-stay-in-your-dataframe-api-inside-the-plan" class="slide level2 smaller">
-<h2>Pain point 7 — Stay in your dataframe API inside the plan</h2>
-<ul>
-<li>Frameworks usually force you to leave Polars once you enter “pipeline land”</li>
-<li>DataOps are <strong>transparent</strong>: Polars methods are called directly on DataOps (<code>historical_data.with_columns(...)</code>, <code>.collect()</code>, indexing, joins)</li>
-<li>Python control flow (<code>for month in ...</code>) must be put in <code>@deferred</code> / <code>apply_func</code> functions</li>
-<li>Deferred functions appear as <strong>one graph node</strong> — good for reports and caching</li>
-</ul>
-
-
 </section></section>
+<section id="section-5" class="title-slide slide level1 center">
+<h1></h1>
+
+
+</section>
+
 
     </div>
   <div class="quarto-auto-generated-content" style="display: none;">

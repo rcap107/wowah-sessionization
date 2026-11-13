@@ -11,7 +11,7 @@
     "href": "skrub-dataops.html#section",
     "title": "Skrub Data Ops: an application to player churn",
     "section": "",
-    "text": "Textbook ML\n\n\\(X \\in \\mathbb{R}^{n \\times p},\\ y \\in \\mathbb{R}^n\\)\n\\(\\hat{y} = f_{\\hat{\\theta}}(X)\\)\n\nestimator = TabICLRegressor()\n\ncross_validate(estimator, X, y)\n\nestimator.fit(X_train, y_train)\nestimator.predict(X_new)\n\nData-Science Practice"
+    "text": "Textbook ML\n\n\\(X \\in \\mathbb{R}^{n \\times p},\\ y \\in \\mathbb{R}^n\\)\n\\(\\hat{y} = f_{\\hat{\\theta}}(X)\\)\n\n\nestimator = TabICLRegressor()\n\ncross_validate(estimator, X, y)\n\nestimator.fit(X_train, y_train)\nestimator.predict(X_new)\n\n\n\nData-Science Practice"
   },
   {
     "objectID": "skrub-dataops.html#section-1",
@@ -88,21 +88,21 @@
     "href": "skrub-dataops.html#pain-point-2-cross-validation-with-irregular-time-splits-2",
     "title": "Skrub Data Ops: an application to player churn",
     "section": "Pain point 2 — Cross-validation with irregular time splits",
-    "text": "Pain point 2 — Cross-validation with irregular time splits\n\n\n\nWrite a custom splitter that uses custom dataframe logic to select the samples\nWith DataOps plug it in skb.mark_as_X(cv=Splitter())\nNow, the splitter is honored by cross_validate, train_test_split, randomized search, and scoring\n\n\nclass Splitter:\n    def split(self, X, y=None):\n        ...\n        for split_point in ...:\n            test_month = pl.Series([split_point]).dt.offset_by(\"1mo\").first()\n            train_idx = (\n                X.with_row_index(\"idx\")\n                .filter(pl.col(\"month\") &lt;= split_point)[\"idx\"]\n            )\n            test_idx = (\n                X.with_row_index(\"idx\")\n                .filter(pl.col(\"month\") == test_month)[\"idx\"]\n            )"
+    "text": "Pain point 2 — Cross-validation with irregular time splits\n\n\n\nData Ops natively support custom splitters for splitting data in the DAG.\nCustom splitters can use custom dataframe logic to select the samples\nSplitters plugged in skb.mark_as_X(cv=Splitter()) are honored by cross_validate, train_test_split, randomized search, and scoring\n\n\nclass Splitter:\n    def split(self, X, y=None):\n        ...\n        for split_point in ...:\n            test_month = pl.Series([split_point]).dt.offset_by(\"1mo\").first()\n            train_idx = (\n                X.with_row_index(\"idx\")\n                .filter(pl.col(\"month\") &lt;= split_point)[\"idx\"]\n            )\n            test_idx = (\n                X.with_row_index(\"idx\")\n                .filter(pl.col(\"month\") == test_month)[\"idx\"]\n            )"
   },
   {
     "objectID": "skrub-dataops.html#pain-point-3-tuning-wrangling-choices-not-just-model-knobs",
     "href": "skrub-dataops.html#pain-point-3-tuning-wrangling-choices-not-just-model-knobs",
     "title": "Skrub Data Ops: an application to player churn",
     "section": "Pain point 3 — Tuning wrangling choices, not just model knobs",
-    "text": "Pain point 3 — Tuning wrangling choices, not just model knobs\n\nModel choices are not limited to model hyperparameters: session_gap (15/30/60 min), include location features?, add Gini?, which lags?\nThese are data pipeline decisions, with big performance and runtime impact\nWith DataOps choices can be dropped inline, where the value is used — choose_from, choose_bool, choose_float(log=True)\nOne call to skb.make_randomized_search(backend=\"optuna\", ...) turns the whole DAG into a search"
+    "text": "Pain point 3 — Tuning wrangling choices, not just model knobs\n\nModel choices are not limited to model hyperparameters: session_gap (15/30/60 min), include location features?, add Gini?, which lags?\nThese are data pipeline decisions, with big performance and runtime impact\nPipeline decisions modify the pipeline itself, and regular hyperparameter tuning does not work"
   },
   {
     "objectID": "skrub-dataops.html#pain-point-3-tuning-wrangling-choices-not-just-model-knobs-1",
     "href": "skrub-dataops.html#pain-point-3-tuning-wrangling-choices-not-just-model-knobs-1",
     "title": "Skrub Data Ops: an application to player churn",
     "section": "Pain point 3 — Tuning wrangling choices, not just model knobs",
-    "text": "Pain point 3 — Tuning wrangling choices, not just model knobs\n\nReplace any value with a choice:\n\n X = data.drop(columns=\"target\", errors=\"ignore\").skb.mark_as_X()\n y = data[\"target\"].skb.mark_as_y()\n pred = X.skb.apply(StandardScaler()).skb.apply(\n-    LogisticRegression(C=1.0),\n+    LogisticRegression(C=skrub.choose_float(0.1, 10.0, log=True)),\n     y=y)\n\nUse grid search or randomized search (possibly backed by Optuna).\n\n-learner = pred.skb.make_learner().fit({...})\n+learner = pred.skb.make_randomized_search().fit({...})\n\nTune data pipeline decisions, not only hyperparameters\n\nX_enc = X.skb.apply_func(build_features,\n+  additional_features=skrub.choose_bool()\n )\n pred = X.skb.apply(LogisticRegression())"
+    "text": "Pain point 3 — Tuning wrangling choices, not just model knobs\n\nWith DataOps choices can be dropped inline, where the value is used — choose_from, choose_bool, choose_float(log=True)\nOne call to skb.make_randomized_search(backend=\"optuna\", ...) turns the whole DAG into a search\n\n\nReplace any value with a choice:\n\n X = data.drop(columns=\"target\", errors=\"ignore\").skb.mark_as_X()\n y = data[\"target\"].skb.mark_as_y()\n pred = X.skb.apply(StandardScaler()).skb.apply(\n-    LogisticRegression(C=1.0),\n+    LogisticRegression(C=skrub.choose_float(0.1, 10.0, log=True)),\n     y=y)\nTune data pipeline decisions, not only hyperparameters\n\nX_enc = X.skb.apply_func(build_features,\n+  additional_features=skrub.choose_bool()\n )\n pred = X.skb.apply(LogisticRegression())"
   },
   {
     "objectID": "skrub-dataops.html#pain-point-4-one-pipeline-object-many-inputs",
@@ -263,7 +263,7 @@
     "href": "skrub-dataops.html#with-data-ops",
     "title": "Skrub Data Ops: an application to player churn",
     "section": "With Data Ops…",
-    "text": "With Data Ops…\nData wrangling: filtering, resampling, aggregations, joins, …\n\nCross-validate without data leaks.\nTune choices with validation scores.\nReplay on new inputs.\n\n\n\n\n\nDataOps\n\n\n\nAll the goodies of the scikit-learn framework: fit() & predict(), cross-validation, hyperparameter tuning, serialization.\nWithout the usual restrictions & while supporting arbitrary data processing. Multiple inputs, feature & target construction, filtering samples, dynamic arguments for CV splitters & scorers, etc.\nAnd more: Optuna integration, dynamic previews, pipeline inspection, …"
+    "text": "With Data Ops…\nData wrangling: filtering, resampling, aggregations, joins, …\n\nCross-validate without data leaks.\nTune choices with validation scores.\nReplay on new inputs.\n\n\n\n\n\nDataOps\n\n\n\nAll the goodies of the scikit-learn framework: fit() & predict(), cross-validation, hyperparameter tuning, serialization.\nWithout the usual restrictions & while supporting arbitrary data processing: multiple inputs, filtering samples, dynamic arguments …\nAnd more: Optuna integration, pipeline inspection, …"
   },
   {
     "objectID": "skrub-dataops.html#act-2-dataset-and-problem",
@@ -277,14 +277,14 @@
     "href": "skrub-dataops.html#the-game",
     "title": "Skrub Data Ops: an application to player churn",
     "section": "The game",
-    "text": "The game\n\n\n\nWorld of Warcraft (WoW) is a subscription-based MMORPG released in 2004 by Blizzard Entertainment.\nIn WoW, players chreate character avatars to navigate the open game world and perform various activities.\nPlayers level up their caracters to make them more powerful.\nPlayer characters belong to a faction (Alliance or Horde), have a race and a class.\n\n\n\n\n\nWorld of Warcraft original cover"
+    "text": "The game\n\n\n\nWorld of Warcraft (WoW) is a subscription-based MMORPG released in 2004 by Blizzard Entertainment.\nPlayers create character avatars to navigate the open game world and perform various activities.\nPlayers level up their caracters to make them more powerful.\nA single player may have multiple avatars.\n\n\n\n\n\nWorld of Warcraft original cover"
   },
   {
     "objectID": "skrub-dataops.html#the-problem",
     "href": "skrub-dataops.html#the-problem",
     "title": "Skrub Data Ops: an application to player churn",
     "section": "The problem",
-    "text": "The problem\n\nSince WoW is subscription-based, players pay a monthly fee to play the game.\nSome players eventually stop playing, and thus stop paying their subscription.\n\n\n\n\nWe want to predict which players are likely to churn in the next month, in order to enact some measure to keep them from leaving.\nA player churns if they have no activity for two full months.\n\n\n\n\n\nOur “unit of analysis” is a (player character, month) pair.\nEach pair tells us whether the given player character played on the given month."
+    "text": "The problem\n\nWe are working with a subscription-based strategy where players pay a monthly fee to play the game.\nSome players eventually stop playing, and thus stop paying their subscription.\n\n\n\n\nWe want to predict which players are likely to churn in the next month, in order to enact some measure to keep them from leaving.\nA player churns if they have no activity for two full months.\n\n\n\n\n\nOur “unit of analysis” is a (player character, month) pair.\nEach pair tells us whether the given player character played on the given month."
   },
   {
     "objectID": "skrub-dataops.html#the-dataset-world-of-warcraft-avatar-history",
@@ -305,14 +305,14 @@
     "href": "skrub-dataops.html#pain-point-1---data-ingestion-is-part-of-the-pipeline",
     "title": "Skrub Data Ops: an application to player churn",
     "section": "Pain point 1 - Data ingestion is part of the pipeline",
-    "text": "Pain point 1 - Data ingestion is part of the pipeline\n\n\n\nData is not in a clean format:\n\nHeartbeats are in text files scattered over hundreds of folders\nLogs need to be resampled to have (character, month) granularity\n\nThe same transformations (and all other learned states) need to be replayed on new data.\nGlue code and pre-processing scripts are brittle and prone to errors.\n\n\nimport skrub\n\ndef draft_loader():\n  return pd.read_csv(\"path/to/file.csv\")\n\ndef prod_loader():\n  return api.fetch().to_pandas()\n\nloader = skrub.var(\"loader\", draft_loader, becomes_default=True)\n# build the DAG  \nlearner = data_op.skb.make_learner(fitted=True)\n\n# Use a different loader to get production data\nlearner.predict({\"loader\": prod_loader})\n\n# No changes needed by the learner!"
+    "text": "Pain point 1 - Data ingestion is part of the pipeline\n\nData is not in a clean format:\n\nHeartbeats are in text files scattered over hundreds of folders\nLogs need to be resampled to have (character, month) granularity\n\nThe same transformations (and all other learned states) need to be replayed on new data.\nBoilerplate code and pre-processing scripts are brittle and prone to errors."
   },
   {
     "objectID": "skrub-dataops.html#section-4",
     "href": "skrub-dataops.html#section-4",
     "title": "Skrub Data Ops: an application to player churn",
     "section": "",
-    "text": "Unit of analysis: the (character, month) pair, built as a cross-product grid\nFeatures: sessionization (SessionEncoder), monthly aggregates, zone-rarity / Gini location features, lag & diff features\nModel: HistGradientBoostingClassifier + TableVectorizer, month-by-month temporal CV\n\n\n\n\n\n\n\nImportant\n\n\nModel optimization is intentionally not the focus of this talk."
+    "text": "We won’t be going over the detailed implementation.\nThe material is available in the repository.\n\n\n\n\nThe implementation involved a number of pain points that Data Ops simplified."
   },
   {
     "objectID": "skrub-dataops.html#the-dataset-world-of-warcraft-avatar-history-1",
@@ -326,7 +326,7 @@
     "href": "skrub-dataops.html#the-dataset",
     "title": "Skrub Data Ops: an application to player churn",
     "section": "The dataset",
-    "text": "The dataset\n\n\n\nDataset: World of Warcraft Avatar history Dataset 1\n~35.6M timestamped “character is active” lines (heartbeats).\nHeartbeats are stored in txt files, grouped by day and quarter.\nTime range: 2005-12-31 / 2009-01-10 in the Taiwanese server.\nTwo expansions are included in the range:\n\nThe Burning Crusade (April 3, 2007)\nWrath of the Lich King (November 18, 2008).\n\n\n\n# cut output of tree WoWAH\nWoWAH\n├── 2006_01_03\n│   ├── 2006-01-01\n│   │   ├── 00-03-56.txt\n│   │   ├── 00-13-43.txt\n│   │   ├── 00-23-48.txt\n│   │   ├── 00-33-48.txt\n│   │   ├── ...\n│   ├── 2006-01-02\n│   ├── ...\n├── 2006_04_06\n├── ...\n\nSource"
+    "text": "The dataset\n\n\n\nTraining samples are plain text, with custom formatting.\nA custom parser must be used to convert the samples and extract the correct dtypes.\n\n\n# head WoWAH/2006_01_03/2006-01-01/00-03-56.txt \nPersistent_Storage = {\n    [1] = \"0, 12/31/05 23:59:46, 1,0, , 5, Orc, Warrior, Durotar, no, 0\",\n    [2] = \"0, 12/31/05 23:59:46, 1,1, , 9, Orc, Shaman, Durotar, yes, 0\",\n    [3] = \"0, 12/31/05 23:59:52, 2,2, , 13, Orc, Shaman, Durotar, no, 0\",\n    [4] = \"0, 12/31/05 23:59:52, 2,3,0, 14, Orc, Warrior, Durotar, no, 0\",\n    [5] = \"0, 12/31/05 23:59:52, 2,4, , 14, Orc, Shaman, Durotar, yes, 0\",\n    [6] = \"0, 12/31/05 23:59:52, 2,5, , 16, Orc, Hunter, The Barrens, yes, 0\",\n    [7] = \"0, 12/31/05 23:59:52, 2,6, , 18, Orc, Warlock, The Barrens, no, 0\",\n    [8] = \"0, 12/31/05 23:59:52, 2,7, , 17, Orc, Hunter, Silverpine Forest, yes, 0\","
   },
   {
     "objectID": "skrub-dataops.html#the-dataset-1",
@@ -389,7 +389,7 @@
     "href": "skrub-dataops.html#pain-point-2-leakage-in-temporal-feature-engineering",
     "title": "Skrub Data Ops: an application to player churn",
     "section": "Pain point 2 — Leakage in temporal feature engineering",
-    "text": "Pain point 2 — Leakage in temporal feature engineering\n\nFeatures must only use data available at scoring time\nSession detection and aggregations are stateful w.r.t. time: doing them once on the full table leaks the future\nsklearn Pipeline cannot do this: X/y must exist before the pipeline starts, and wrangling lives outside\nwe are performing aggregations Over\nskrub docs warn explicitly: aggregation can introduce data leakage → wrap it in the DataOps plan\nIn the example: X and y are cut inside the plan (mark_as_X / mark_as_y), so each CV fold re-runs the feature code on training data only\n\n\nThis is the central difficulty of the example (main.py:90-186). If the target month is April, features may only be built from February data and earlier (main.py:136-143). The skrub sessionization doc (modules/multi_column_operations/sessionization.rst) carries a warning box saying aggregation leaks unless it is re-fit per fold — either wrapped in an sklearn transformer or done “with the skrub Data Ops framework”. DataOps bind the whole wrangling DAG to the prediction, so skb.cross_validate() re-executes the leakage-safe steps inside every fold automatically, instead of the user hand-rolling fold-by-fold feature construction."
+    "text": "Pain point 2 — Leakage in temporal feature engineering\n\nFeatures must only use data available at scoring time\nSession detection and aggregation must be executed only on data we have access to\nwe are performing aggregations over different, time-aware splits"
   },
   {
     "objectID": "skrub-dataops.html#pain-point-5---debugging-a-complex-dag",
@@ -397,5 +397,68 @@
     "title": "Skrub Data Ops: an application to player churn",
     "section": "Pain point 5 - Debugging a complex DAG",
     "text": "Pain point 5 - Debugging a complex DAG"
+  },
+  {
+    "objectID": "skrub-dataops.html#what-have-we-seen-so-far",
+    "href": "skrub-dataops.html#what-have-we-seen-so-far",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "What have we seen so far?",
+    "text": "What have we seen so far?\n\nData science is harder than what you learn in classes\nA full ML pipeline involves preprocessing, feature engineering and model training\nWe want to learn a “state” (it’s called machine learning after all), evaluate performance and do so while avoiding data leakage\nData Ops are a framework that allows to build stateful pipelines for arbitrary code and inputs"
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-4-debugging-a-complex-dag",
+    "href": "skrub-dataops.html#pain-point-4-debugging-a-complex-dag",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Pain point 4 — Debugging a complex DAG",
+    "text": "Pain point 4 — Debugging a complex DAG\n\nData Ops work lazily: they need to evaluate all nodes in the DAG to run\nEager previews: pass a value to var() and every node shows its result immediately\nskb.report() emits an HTML report: every node’s name, description, predecessors, fitted estimator, and data preview\nOn failure, the report shows the offending node and the traceback"
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-4---debugging-a-complex-dag",
+    "href": "skrub-dataops.html#pain-point-4---debugging-a-complex-dag",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Pain point 4 - Debugging a complex DAG",
+    "text": "Pain point 4 - Debugging a complex DAG"
+  },
+  {
+    "objectID": "skrub-dataops.html#what-are-we-here-for",
+    "href": "skrub-dataops.html#what-are-we-here-for",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "What are we here for?",
+    "text": "What are we here for?\n\nThe dataset: World of Warcraft Avatar history Dataset 1\n\n~35.6M timestamped player is active” lines (heartbeats).\n\nThe problem: Predict whether a player will stop playing (will churn) on a given month, to implement some policy to retain them.\n\nSource"
+  },
+  {
+    "objectID": "skrub-dataops.html#world-of-warcraft-avatar-history",
+    "href": "skrub-dataops.html#world-of-warcraft-avatar-history",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "World of Warcraft Avatar history",
+    "text": "World of Warcraft Avatar history\n\n\n\n~35.6M timestamped “character is active” lines (heartbeats).\nHeartbeats are stored in txt files, grouped by day and quarter.\nTime range: 2005-12-31 / 2009-01-10 in the Taiwanese server.\nTwo expansions are included in the range:\n\nThe Burning Crusade (April 2007)\nWrath of the Lich King (November 2008).\n\n\n\n# cut output of tree WoWAH\nWoWAH\n├── 2006_01_03\n│   ├── 2006-01-01\n│   │   ├── 00-03-56.txt\n│   │   ├── 00-13-43.txt\n│   │   ├── 00-23-48.txt\n│   │   ├── 00-33-48.txt\n│   │   ├── ...\n│   ├── 2006-01-02\n│   ├── ...\n├── 2006_04_06\n├── ..."
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-4---debugging-and-inspecting-a-pipeline",
+    "href": "skrub-dataops.html#pain-point-4---debugging-and-inspecting-a-pipeline",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Pain point 4 - Debugging and inspecting a pipeline",
+    "text": "Pain point 4 - Debugging and inspecting a pipeline\n\nInspecting a regular pipeline is complex and requires programmatic access\nOnce deployed, it is hard to maintain a trained model (“why was this step needed?”, “where is the source code?”)\nThe result of intermediate steps is hard to access"
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-4---debugging-and-inspecting-a-pipeline-1",
+    "href": "skrub-dataops.html#pain-point-4---debugging-and-inspecting-a-pipeline-1",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Pain point 4 - Debugging and inspecting a pipeline",
+    "text": "Pain point 4 - Debugging and inspecting a pipeline\n\nData Ops reports provide rich information about each node\nThe source code used to generate a Data Op is bundled with it\nWhen a preview or environment is provided, intermediate results can be shown"
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-1---data-preparation-is-part-of-the-pipeline-1",
+    "href": "skrub-dataops.html#pain-point-1---data-preparation-is-part-of-the-pipeline-1",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Pain point 1 - Data preparation is part of the pipeline",
+    "text": "Pain point 1 - Data preparation is part of the pipeline\n\n\n\nData Ops bring data ingestion and processing into the pipeline.\nPreprocessing can vary depending on the specific use case.\n\n\nimport skrub\n\ndef draft_loader():\n  return pd.read_csv(\"path/to/file.csv\")\n\ndef prod_loader():\n  return api.fetch().to_pandas()\n\nloader = skrub.var(\"loader\", draft_loader, becomes_default=True)\n# build the DAG  \nlearner = data_op.skb.make_learner(fitted=True)\n\n# Use a different loader to get production data\nlearner.predict({\"loader\": prod_loader})\n\n# No changes needed by the learner!"
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-4---debugging-and-inspecting-a-pipeline-2",
+    "href": "skrub-dataops.html#pain-point-4---debugging-and-inspecting-a-pipeline-2",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Pain point 4 - Debugging and inspecting a pipeline",
+    "text": "Pain point 4 - Debugging and inspecting a pipeline"
   }
 ]
