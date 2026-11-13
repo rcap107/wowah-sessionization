@@ -185,7 +185,7 @@ data = data_path.skb.apply_func(pd.read_csv)
 hist = skrub.var("hist_path").skb.apply_func(pd.read_csv)
 X = data.drop(columns="target", errors="ignore").skb.mark_as_X()
 y = data["target"].skb.mark_as_y()
-X_join = X.join(hist, on="id", how="left")
+X_join = X.merge(hist, on="id", how="left")
 pred = X_join.skb.apply(
     StandardScaler()
 ).skb.apply(LogisticRegression(), y=y)
@@ -203,7 +203,7 @@ Cross-validate
 
 ```{.python code-line-numbers="|2|"}
 pred.skb.cross_validate(
-    environment={"data_path": "historical_data.csv"}
+    environment={"data_path": "historical_data.csv", "hist_path": "archive.csv"}
 )
 ```
 
@@ -218,10 +218,10 @@ Make a "learner" (object with `fit()` & `predict()`)
 ```{.python code-line-numbers="|2|3|5|6|"}
 learner = pred.skb.make_learner(
 ).fit(
-    environment={"data_path": "historical_data.csv"}
+    environment={"data_path": "historical_data.csv", "hist_path": "archive.csv"}
 )
 learner.predict(
-    environment={"data_path": "new_data.csv"}
+    environment={"data_path": "new_data.csv", "hist_path": "archive.csv"}
 )
 ```
 
@@ -253,11 +253,21 @@ learner.predict(
 - **The dataset**: World of Warcraft Avatar history Dataset [^1]
   - World of Warcraft is a **subscription-based** online videogame.
   - The dataset collects player activity over 2005-2009.
+
+
+::: {.fragment}
+
+
+
+
+
 - **The problem**: Some players eventually stop playing, and thus stop paying
 their subscription.
   - A player **churns** if they have **no activity** for two full months. 
   - We want to predict which players are likely to churn in the next month, in
 order to enact some measure to keep them from leaving. 
+
+:::
 
 ::: {.fragment}
 
@@ -280,7 +290,7 @@ order to enact some measure to keep them from leaving.
 Blizzard Entertainment. 
 - Players create **character avatars** to navigate the open game world
 and perform various activities. 
-- Players level up their caracters to make them more powerful. 
+- Players level up their characters to make them more powerful. 
 - A single player may have **multiple avatars**. 
 
 :::
@@ -356,7 +366,7 @@ Persistent_Storage = {
 
 :::
 
-## The datasets: some statistics {.smaller auto-animate="true"}
+## The dataset: some statistics {.smaller}
 ![](reports/exploration/characters_by_month.png)
 
 
@@ -375,7 +385,7 @@ More detail about feature engineering and model selection is available in the fu
 
 ## Model selection
 
-- `HistGradientBoostingClassifier` as the evaluation model
+- `HistGradientBoostingClassifier` (HGBC) as the evaluation model
 - Month-by-month temporal CV
 - Hyperparameter tuning with Data Ops
 
@@ -389,12 +399,12 @@ measure we decide to implement, so we can only try to **predict player behavior*
 
 # Act 3: The implementation
 
+## What is this section for?
 
-::: {.callout}
+- The implementation involved a number of **pain points** that Data Ops simplified.
+- We focus on some of the main issues without discussing the entire implementation here
 
-The implementation involved a number of **pain points** that Data Ops simplified.
 
-:::
 
 
 
@@ -419,18 +429,18 @@ on new data.
 ```{.python code-line-numbers="|2|3|5-7|9-10|12-13|14|15|"}
 def make_data_op():
     raw_files = skrub.var("raw_files")
-    historical_data = raw_files.skb.apply_func(load, fraction=load_fraction)
+    historical_data = raw_files.skb.apply_func(load)
 
     user_month_has_played = historical_data.skb.apply_func(
         build_churn_dataset
     ).skb.set_name("query")
     
-    X = user_month_has_played["char", "month"].skb.mark_as_X(cv=Splitter())
+    X = user_month_has_played["char", "month"].skb.mark_as_X(...)
     y = user_month_has_played["churn_next"].skb.mark_as_y()
 
     feature_table = historical_data.skb.apply_func(build_feature_table)
     encoded = feature_table.skb.apply(skrub.TableVectorizer())
-    data_op = encoded.skb.apply(HGB(), y=y)
+    data_op = encoded.skb.apply(HGBC(), y=y)
     return data_op
 
 ```
@@ -466,25 +476,13 @@ predictions = learner.predict(unseen_env)
 :::
 
 
-## Pain point 2 — Leakage in temporal feature engineering {.smaller}
-
-- Features must only use data available at scoring time
-- Session detection and aggregation must be executed only on **data we have access to**
-- We are performing aggregations over different, time-aware splits
-
-
-## Pain point 3 — Cross-validation with irregular time splits {.smaller auto-animate="true"}
-
-![](images/user_months_plot.png)
-
-
-## Pain point 3 — Cross-validation with irregular time splits {.smaller auto-animate="true"}
-
+## Pain point 2 — Time-aware cross-validation {.smaller auto-animate="true"}
 
 ::: {.columns}
 
 ::: {.column}
 
+- Features and session aggregations must only use **data available at scoring time**
 - Off-the-shelf `TimeSeriesSplit` assumes folds of **equal size**
 - Here the number of (character, month) rows **grows every month** — folds are unbalanced by nature
 
@@ -498,7 +496,7 @@ predictions = learner.predict(unseen_env)
 
 :::
 
-## Pain point 3 — Cross-validation with irregular time splits {.smaller auto-animate="true"}
+## Pain point 2 — Time-aware cross-validation {.smaller auto-animate="true"}
 
 
 ::: {.columns}
@@ -537,58 +535,66 @@ class Splitter:
 :::
 
 
-## Pain point 4 — Tuning wrangling choices, not just model knobs {.smaller}
+## Pain point 3 — Tuning wrangling choices, not just model knobs {.smaller auto-animate="true"}
 
 - Model choices are not limited to model hyperparameters: `session_gap` (15/30/60 min), include location features?, which lags?
 - These are **data pipeline decisions**, with big performance and runtime impact
 - Pipeline decisions **modify the pipeline itself**, and regular hyperparameter tuning does not work
 
 
-## Pain point 4 — Tuning wrangling choices, not just model knobs {.smaller}
+## Pain point 3 — Tuning wrangling choices, not just model knobs {.smaller auto-animate="true"}
 - **With DataOps** choices can be dropped inline, where the value is used — `choose_from`, `choose_bool`, `choose_float(log=True)`
 - One call to `skb.make_randomized_search(backend="optuna", ...)` turns the whole DAG into a search 
 
+## Pain point 3 — Tuning wrangling choices, not just model knobs {.smaller auto-animate="true"}
 ```{=html}
 <ul style="font-size: 0.8em;">
 <li>Replace any value with a choice:</li>
 </ul>
-<pre style="font-size: 0.55em; background-color: #f5f5f5; padding: 0.6em 1em; margin: 0.8em 0;"><code style="background-color: inherit;"> X = data.drop(columns="target", errors="ignore").skb.mark_as_X()
- y = data["target"].skb.mark_as_y()
- pred = X.skb.apply(StandardScaler()).skb.apply(
-<span style="color: #c00; background-color: #fff0f0;">-    LogisticRegression(<span style="background-color: #f9a0a0;">C=1.0</span>),</span>
-<span style="color: #080; background-color: #f0fff0;">+    LogisticRegression(<span style="background-color: #9be99b;">C=skrub.choose_float(0.1, 10.0, log=True)</span>),</span>
-     y=y)</code></pre>
+<pre style="font-size: 0.55em; background-color: #f5f5f5; padding: 0.6em 1em; margin: 0.8em 0;"><code style="background-color: inherit;">X_enc = X.skb.apply_func(build_feature_table,
+<span style="color: #c00; background-color: #fff0f0;">-    session_gap=<span style="background-color: #f9a0a0;">30</span>,</span>
+<span style="color: #080; background-color: #f0fff0;">+    session_gap=<span style="background-color: #9be99b;">skrub.choose_from([15, 30, 60])</span>,</span>
+ )
+ pred = X_enc.skb.apply(HGBC(), y=y)</code></pre>
+<ul style="font-size: 0.8em;">
 <li>Tune data pipeline decisions, not only hyperparameters</li>
 </ul>
-<pre style="font-size: 0.55em; background-color: #f5f5f5; padding: 0.6em 1em; margin: 0.8em 0;"><code style="background-color: inherit;">X_enc = X.skb.apply_func(build_features,
-<span style="color: #080; background-color: #f0fff0;">+  additional_features=<span style="background-color: #9be99b;">skrub.choose_bool()</span></span>
+<pre style="font-size: 0.55em; background-color: #f5f5f5; padding: 0.6em 1em; margin: 0.8em 0;"><code style="background-color: inherit;">X_enc = X.skb.apply_func(build_feature_table,
+<span style="color: #080; background-color: #f0fff0;">+    additional_features=<span style="background-color: #9be99b;">skrub.choose_bool()</span>,</span>
  )
- pred = X.skb.apply(LogisticRegression())</code></pre>
+ pred = X_enc.skb.apply(HGBC(), y=y)</code></pre>
 ```
 
-## Pain point 5 - Debugging and inspecting a pipeline
+## Pain point 4 - Debugging and inspecting a pipeline
 - Inspecting a regular pipeline is complex and requires programmatic access
 - Once deployed, it is hard to maintain a trained model ("why was this step needed?", 
 "where is the source code?")
 - The result of intermediate steps is hard to access
 
-## Pain point 5 - Debugging and inspecting a pipeline
+## Pain point 4 - Debugging and inspecting a pipeline
 - Data Ops reports provide rich information about each node
 - The source code used to generate a Data Op is bundled with it
 - When a preview or environment is provided, intermediate results can be shown
 
-## Pain point 5 - Debugging and inspecting a pipeline
+## Pain point 4 - Debugging and inspecting a pipeline
 
 <iframe src="reports/execution_report/index.html" width="100%" height="480px" style="border: 1px solid #ccc; border-radius: 4px;"> </iframe>
 
 
 # Conclusions
 
+## What have we seen so far? {.smaller}
+
 ::: {.columns}
 
 ::: {.column}
 
-...
+
+- Data science is harder than what you learn in classes
+- A full ML pipeline involves preprocessing, feature engineering and model training
+- We want to learn a "state" (it's called machine **learning** after all), [**evaluate performance**]{.emph} and do so while avoiding [**data leakage**]{.emph}
+- [**Data Ops**]{.emph} are a framework that allows to build [**stateful pipelines**]{.emph} for
+[**arbitrary code and inputs**]{.emph}
 
 :::
 

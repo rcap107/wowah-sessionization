@@ -39,7 +39,7 @@
     "href": "skrub-dataops.html#basic-example",
     "title": "Skrub Data Ops: an application to player churn",
     "section": "Basic example",
-    "text": "Basic example\n\n\n\nDeclare the pipeline\ndata_path = skrub.var(\"data_path\")\ndata = data_path.skb.apply_func(pd.read_csv)\nhist = skrub.var(\"hist_path\").skb.apply_func(pd.read_csv)\nX = data.drop(columns=\"target\", errors=\"ignore\").skb.mark_as_X()\ny = data[\"target\"].skb.mark_as_y()\nX_join = X.join(hist, on=\"id\", how=\"left\")\npred = X_join.skb.apply(\n    StandardScaler()\n).skb.apply(LogisticRegression(), y=y)\n\n\nCross-validate\npred.skb.cross_validate(\n    environment={\"data_path\": \"historical_data.csv\"}\n)\n\n\nMake a “learner” (object with fit() & predict())\nlearner = pred.skb.make_learner(\n).fit(\n    environment={\"data_path\": \"historical_data.csv\"}\n)\nlearner.predict(\n    environment={\"data_path\": \"new_data.csv\"}\n)"
+    "text": "Basic example\n\n\n\nDeclare the pipeline\ndata_path = skrub.var(\"data_path\")\ndata = data_path.skb.apply_func(pd.read_csv)\nhist = skrub.var(\"hist_path\").skb.apply_func(pd.read_csv)\nX = data.drop(columns=\"target\", errors=\"ignore\").skb.mark_as_X()\ny = data[\"target\"].skb.mark_as_y()\nX_join = X.merge(hist, on=\"id\", how=\"left\")\npred = X_join.skb.apply(\n    StandardScaler()\n).skb.apply(LogisticRegression(), y=y)\n\n\nCross-validate\npred.skb.cross_validate(\n    environment={\"data_path\": \"historical_data.csv\", \"hist_path\": \"archive.csv\"}\n)\n\n\nMake a “learner” (object with fit() & predict())\nlearner = pred.skb.make_learner(\n).fit(\n    environment={\"data_path\": \"historical_data.csv\", \"hist_path\": \"archive.csv\"}\n)\nlearner.predict(\n    environment={\"data_path\": \"new_data.csv\", \"hist_path\": \"archive.csv\"}\n)"
   },
   {
     "objectID": "skrub-dataops.html#basic-example-1",
@@ -95,14 +95,14 @@
     "href": "skrub-dataops.html#pain-point-3-tuning-wrangling-choices-not-just-model-knobs",
     "title": "Skrub Data Ops: an application to player churn",
     "section": "Pain point 3 — Tuning wrangling choices, not just model knobs",
-    "text": "Pain point 3 — Tuning wrangling choices, not just model knobs\n\nModel choices are not limited to model hyperparameters: session_gap (15/30/60 min), include location features?, add Gini?, which lags?\nThese are data pipeline decisions, with big performance and runtime impact\nPipeline decisions modify the pipeline itself, and regular hyperparameter tuning does not work"
+    "text": "Pain point 3 — Tuning wrangling choices, not just model knobs\n\nModel choices are not limited to model hyperparameters: session_gap (15/30/60 min), include location features?, which lags?\nThese are data pipeline decisions, with big performance and runtime impact\nPipeline decisions modify the pipeline itself, and regular hyperparameter tuning does not work"
   },
   {
     "objectID": "skrub-dataops.html#pain-point-3-tuning-wrangling-choices-not-just-model-knobs-1",
     "href": "skrub-dataops.html#pain-point-3-tuning-wrangling-choices-not-just-model-knobs-1",
     "title": "Skrub Data Ops: an application to player churn",
     "section": "Pain point 3 — Tuning wrangling choices, not just model knobs",
-    "text": "Pain point 3 — Tuning wrangling choices, not just model knobs\n\nWith DataOps choices can be dropped inline, where the value is used — choose_from, choose_bool, choose_float(log=True)\nOne call to skb.make_randomized_search(backend=\"optuna\", ...) turns the whole DAG into a search\n\n\nReplace any value with a choice:\n\n X = data.drop(columns=\"target\", errors=\"ignore\").skb.mark_as_X()\n y = data[\"target\"].skb.mark_as_y()\n pred = X.skb.apply(StandardScaler()).skb.apply(\n-    LogisticRegression(C=1.0),\n+    LogisticRegression(C=skrub.choose_float(0.1, 10.0, log=True)),\n     y=y)\nTune data pipeline decisions, not only hyperparameters\n\nX_enc = X.skb.apply_func(build_features,\n+  additional_features=skrub.choose_bool()\n )\n pred = X.skb.apply(LogisticRegression())"
+    "text": "Pain point 3 — Tuning wrangling choices, not just model knobs\n\nWith DataOps choices can be dropped inline, where the value is used — choose_from, choose_bool, choose_float(log=True)\nOne call to skb.make_randomized_search(backend=\"optuna\", ...) turns the whole DAG into a search"
   },
   {
     "objectID": "skrub-dataops.html#pain-point-4-one-pipeline-object-many-inputs",
@@ -277,7 +277,7 @@
     "href": "skrub-dataops.html#the-game",
     "title": "Skrub Data Ops: an application to player churn",
     "section": "The game",
-    "text": "The game\n\n\n\nWorld of Warcraft (WoW) is MMORPG released in 2004 by Blizzard Entertainment.\nPlayers create character avatars to navigate the open game world and perform various activities.\nPlayers level up their caracters to make them more powerful.\nA single player may have multiple avatars.\n\n\n\n\n\nWorld of Warcraft original cover"
+    "text": "The game\n\n\n\nWorld of Warcraft (WoW) is MMORPG released in 2004 by Blizzard Entertainment.\nPlayers create character avatars to navigate the open game world and perform various activities.\nPlayers level up their characters to make them more powerful.\nA single player may have multiple avatars.\n\n\n\n\n\nWorld of Warcraft original cover"
   },
   {
     "objectID": "skrub-dataops.html#the-problem",
@@ -375,7 +375,7 @@
     "href": "skrub-dataops.html#model-selection",
     "title": "Skrub Data Ops: an application to player churn",
     "section": "Model selection",
-    "text": "Model selection\n\nHistGradientBoostingClassifier as the evaluation model\nMonth-by-month temporal CV\nHyperparameter tuning with Data Ops"
+    "text": "Model selection\n\nHistGradientBoostingClassifier (HGBC) as the evaluation model\nMonth-by-month temporal CV\nHyperparameter tuning with Data Ops"
   },
   {
     "objectID": "skrub-dataops.html#pain-point-1---data-preparation-is-part-of-the-pipeline",
@@ -403,7 +403,7 @@
     "href": "skrub-dataops.html#what-have-we-seen-so-far",
     "title": "Skrub Data Ops: an application to player churn",
     "section": "What have we seen so far?",
-    "text": "What have we seen so far?\n\nData science is harder than what you learn in classes\nA full ML pipeline involves preprocessing, feature engineering and model training\nWe want to learn a “state” (it’s called machine learning after all), evaluate performance and do so while avoiding data leakage\nData Ops are a framework that allows to build stateful pipelines for arbitrary code and inputs"
+    "text": "What have we seen so far?\n\n\n\nData science is harder than what you learn in classes\nA full ML pipeline involves preprocessing, feature engineering and model training\nWe want to learn a “state” (it’s called machine learning after all), evaluate performance and do so while avoiding data leakage\nData Ops are a framework that allows to build stateful pipelines for arbitrary code and inputs\n\n\nTODO Repo QR code"
   },
   {
     "objectID": "skrub-dataops.html#pain-point-4-debugging-a-complex-dag",
@@ -424,7 +424,7 @@
     "href": "skrub-dataops.html#what-are-we-here-for",
     "title": "Skrub Data Ops: an application to player churn",
     "section": "What are we here for?",
-    "text": "What are we here for?\n\nThe dataset: World of Warcraft Avatar history Dataset 1\n\nWorld of Warcraft is a subscription-based online videogame.\nThe dataset collects player activity over 2005-2009.\n\nThe problem: Some players eventually stop playing, and thus stop paying their subscription.\n\nA player churns if they have no activity for two full months.\nWe want to predict which players are likely to churn in the next month, in order to enact some measure to keep them from leaving.\n\n\n\n\nOur “unit of analysis” is a (player character, month) pair.\nEach pair tells us whether the given player character played on the given month.\n\n\nSource"
+    "text": "What are we here for?\n\nThe dataset: World of Warcraft Avatar history Dataset 1\n\nWorld of Warcraft is a subscription-based online videogame.\nThe dataset collects player activity over 2005-2009.\n\n\n\n\nThe problem: Some players eventually stop playing, and thus stop paying their subscription.\n\nA player churns if they have no activity for two full months.\nWe want to predict which players are likely to churn in the next month, in order to enact some measure to keep them from leaving.\n\n\n\n\n\nOur “unit of analysis” is a (player character, month) pair.\nEach pair tells us whether the given player character played on the given month.\n\n\nSource"
   },
   {
     "objectID": "skrub-dataops.html#world-of-warcraft-avatar-history",
@@ -452,7 +452,7 @@
     "href": "skrub-dataops.html#pain-point-1---data-preparation-is-part-of-the-pipeline-1",
     "title": "Skrub Data Ops: an application to player churn",
     "section": "Pain point 1 - Data preparation is part of the pipeline",
-    "text": "Pain point 1 - Data preparation is part of the pipeline\n\n\nBuilding the pipeline\ndef make_data_op():\n    raw_files = skrub.var(\"raw_files\")\n    historical_data = raw_files.skb.apply_func(load, fraction=load_fraction)\n\n    user_month_has_played = historical_data.skb.apply_func(\n        build_churn_dataset\n    ).skb.set_name(\"query\")\n    \n    X = user_month_has_played[\"char\", \"month\"].skb.mark_as_X(cv=Splitter())\n    y = user_month_has_played[\"churn_next\"].skb.mark_as_y()\n\n    feature_table = historical_data.skb.apply_func(build_feature_table)\n    encoded = feature_table.skb.apply(skrub.TableVectorizer())\n    data_op = encoded.skb.apply(HGB(), y=y)\n    return data_op\n\n\nExporting the learner\n...\ndata_op, X = make_data_op()\nlearner = data_op.skb.make_learner()\nlearner.fit(get_env(\"train\"))\n\nunseen_env = get_env(\"unseen\")\npredictions = learner.predict(unseen_env)\n..."
+    "text": "Pain point 1 - Data preparation is part of the pipeline\n\n\nBuilding the pipeline\ndef make_data_op():\n    raw_files = skrub.var(\"raw_files\")\n    historical_data = raw_files.skb.apply_func(load)\n\n    user_month_has_played = historical_data.skb.apply_func(\n        build_churn_dataset\n    ).skb.set_name(\"query\")\n    \n    X = user_month_has_played[\"char\", \"month\"].skb.mark_as_X(...)\n    y = user_month_has_played[\"churn_next\"].skb.mark_as_y()\n\n    feature_table = historical_data.skb.apply_func(build_feature_table)\n    encoded = feature_table.skb.apply(skrub.TableVectorizer())\n    data_op = encoded.skb.apply(HGBC(), y=y)\n    return data_op\n\n\nExporting the learner\n...\ndata_op, X = make_data_op()\nlearner = data_op.skb.make_learner()\nlearner.fit(get_env(\"train\"))\n\nunseen_env = get_env(\"unseen\")\npredictions = learner.predict(unseen_env)\n..."
   },
   {
     "objectID": "skrub-dataops.html#pain-point-4---debugging-and-inspecting-a-pipeline-2",
@@ -523,5 +523,47 @@
     "title": "Skrub Data Ops: an application to player churn",
     "section": "Pain point 5 - Debugging and inspecting a pipeline",
     "text": "Pain point 5 - Debugging and inspecting a pipeline"
+  },
+  {
+    "objectID": "skrub-dataops.html#the-dataset-some-statistics",
+    "href": "skrub-dataops.html#the-dataset-some-statistics",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "The dataset: some statistics",
+    "text": "The dataset: some statistics"
+  },
+  {
+    "objectID": "skrub-dataops.html#what-is-this-section-for",
+    "href": "skrub-dataops.html#what-is-this-section-for",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "What is this section for?",
+    "text": "What is this section for?\n\nThe implementation involved a number of pain points that Data Ops simplified.\nWe focus on some of the main issues without discussing the entire implementation here"
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-2-time-aware-cross-validation",
+    "href": "skrub-dataops.html#pain-point-2-time-aware-cross-validation",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Pain point 2 — Time-aware cross-validation",
+    "text": "Pain point 2 — Time-aware cross-validation\n\n\n\nFeatures and session aggregations must only use data available at scoring time\nOff-the-shelf TimeSeriesSplit assumes folds of equal size\nHere the number of (character, month) rows grows every month — folds are unbalanced by nature"
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-2-time-aware-cross-validation-1",
+    "href": "skrub-dataops.html#pain-point-2-time-aware-cross-validation-1",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Pain point 2 — Time-aware cross-validation",
+    "text": "Pain point 2 — Time-aware cross-validation\n\n\n\nData Ops natively support custom splitters for splitting data in the DAG.\nCustom splitters can use custom dataframe logic to select the samples\nSplitters plugged in skb.mark_as_X(cv=Splitter()) are honored by cross_validate, train_test_split, randomized search, and scoring\n\n\nclass Splitter:\n    def split(self, X, y=None):\n        ...\n        for split_point in ...:\n            test_month = pl.Series([split_point]).dt.offset_by(\"1mo\").first()\n            train_idx = (\n                X.with_row_index(\"idx\")\n                .filter(pl.col(\"month\") &lt;= split_point)[\"idx\"]\n            )\n            test_idx = (\n                X.with_row_index(\"idx\")\n                .filter(pl.col(\"month\") == test_month)[\"idx\"]\n            )"
+  },
+  {
+    "objectID": "skrub-dataops.html#pain-point-3-tuning-wrangling-choices-not-just-model-knobs-2",
+    "href": "skrub-dataops.html#pain-point-3-tuning-wrangling-choices-not-just-model-knobs-2",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Pain point 3 — Tuning wrangling choices, not just model knobs",
+    "text": "Pain point 3 — Tuning wrangling choices, not just model knobs\n\nReplace any value with a choice:\n\nX_enc = X.skb.apply_func(build_feature_table,\n-    session_gap=30,\n+    session_gap=skrub.choose_from([15, 30, 60]),\n )\n pred = X_enc.skb.apply(HGBC(), y=y)\n\nTune data pipeline decisions, not only hyperparameters\n\nX_enc = X.skb.apply_func(build_feature_table,\n+    additional_features=skrub.choose_bool(),\n )\n pred = X_enc.skb.apply(HGBC(), y=y)"
+  },
+  {
+    "objectID": "skrub-dataops.html#conclusions",
+    "href": "skrub-dataops.html#conclusions",
+    "title": "Skrub Data Ops: an application to player churn",
+    "section": "Conclusions",
+    "text": "Conclusions\n\n\nWhat have we seen so far?\n\nData science is harder than what you learn in classes\nA full ML pipeline involves preprocessing, feature engineering and model training\nWe want to learn a “state” (it’s called machine learning after all), evaluate performance and do so while avoiding data leakage\nData Ops are a framework that allows to build stateful pipelines for arbitrary code and inputs\n\n\nTODO Repo QR code"
   }
 ]
