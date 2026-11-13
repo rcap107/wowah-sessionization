@@ -4,6 +4,8 @@ project:
   output-dir: docs
   render:
     - "*.qmd"
+  resources:
+    - "reports/**"
 
 website:
   title: "WoWAH Player Churn Prediction"

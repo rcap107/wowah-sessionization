@@ -47,6 +47,8 @@ jupyter-cache = "*"
 [tasks]
 # Build and print the user-month churn table from data/wowah_data_2008.parquet
 churn = "python add_churn.py"
+# Explore the full dataset; writes a skrub HTML report and plots
+explore = "python explore_data.py"
 # Build the DataOps plan on a 10% user sample, evaluate it, and generate the report
 evaluate = "python main.py --dataset 2008"
 evaluate-all = "python main.py --dataset all"

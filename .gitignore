@@ -16,3 +16,8 @@ __pycache__/
 # Quarto caches (regenerated on render)
 .jupyter_cache/
 _freeze/
+# Generated reports and plots. The execution report and exploration plots are
+# tracked because they are embedded/rendered into the published docs.
+/reports/*
+!/reports/execution_report/
+!/reports/exploration/
