@@ -1,7 +1,7 @@
 ---
 title: "Skrub Data Ops: an application to player churn"
 subtitle: "[skrub-data.org](https://skrub-data.org/)"
-author: "Riccardo Cappuzzo, Jérôme Dockès"
+author: "Riccardo Cappuzzo"
 institute: "Inria P16, `:probabl.`"
 format:
   revealjs:
@@ -23,6 +23,8 @@ Machine learning on tabular data
 - [skrub-data.org](https://skrub-data.org)
 - This talk: the [skrub DataOps](https://skrub-data.org/stable/data_ops.html) framework.
 :::
+
+# Act 1: skrub Data Ops
 
 ## {.smaller}
 
@@ -126,7 +128,19 @@ estimator.predict(X_new)</code></pre>
 
 ::::
 
-##
+
+## 
+To build a ML pipeline, we need to:
+
+- preprocess the data, perform feature engineering, train a model ... 
+- so we need to [**learn a state**]{style="color: #1a5a8a; font-weight: bold;"}... 
+- while we [**evaluate the predictive performance**]{style="color: #1a5a8a; font-weight: bold;"}... 
+- as we avoid [**data leakage**]{style="color: #1a5a8a; font-weight: bold;"}... 
+- with multi-source input ... 
+
+How do we deal with that? 
+
+## With Data Ops... {.smaller}
 
 **Data wrangling:** filtering, resampling, aggregations, joins, ...
 
@@ -151,72 +165,323 @@ estimator.predict(X_new)</code></pre>
 ::: {.column width=60%}
 
 
+
+::: {.fragment fragment-index=1}
+
 Declare the pipeline
 
-```python
+```{.python code-line-numbers="|1|2|3,4|5-7|"}
 data_path = skrub.var("data_path")
 data = data_path.skb.apply_func(pd.read_csv)
 X = data.drop(columns="target", errors="ignore").skb.mark_as_X()
 y = data["target"].skb.mark_as_y()
-pred = X.skb.apply(StandardScaler()).skb.apply(LogisticRegression(), y=y)
+pred = X.skb.apply(
+    StandardScaler()
+).skb.apply(LogisticRegression(), y=y)
 ```
+
+
+
+:::
+
+
+
+::: {.fragment}
 
 Cross-validate
 
-```python
-pred.skb.cross_validate({"data_path": "historical_data.csv"})
+```{.python code-line-numbers="|2|"}
+pred.skb.cross_validate(
+    environment={"data_path": "historical_data.csv"}
+)
 ```
+
+:::
+
+
+::: {.fragment}
+
 
 Make a "learner" (object with `fit()` & `predict()`)
 
-```python
-learner = pred.skb.make_learner().fit({"data_path": "historical_data.csv"})
-learner.predict({"data_path": "new_data.csv"})
+```{.python code-line-numbers="|2|3|5|6|"}
+learner = pred.skb.make_learner(
+).fit(
+    environment={"data_path": "historical_data.csv"}
+)
+learner.predict(
+    environment={"data_path": "new_data.csv"}
+)
 ```
+
+
+:::
+
 
 
 :::
 
 ::: {.column width=40%}
 
+
+::: {.fragment fragment-index=2}
+
 ![](images/base_ex.svg)
 
 :::
 
+
 :::
 
-## Basic example {auto-animate="true"}
-
-![](images/learner-schema/make_learner.svg)
-
-## In summary, why Data Ops? 
+:::
 
 
 
 
-## The example: World of Warcraft Avatar History {.smaller}
+# Act 2: Dataset and problem
 
-- **Dataset**: WoWAH — ~11M timestamped "heartbeats" (one snapshot every ~10 min, 2006–2009, 91k avatars)
-- **Task**: predict whether a player churns (no activity for two months) in month *M+1*
-- **Unit of analysis**: the (character, month) pair, built as a cross-product grid
-- **Features**: sessionization (`SessionEncoder`), monthly aggregates, zone-rarity / Gini location features, lag & diff features
-- **Model**: `HistGradientBoostingClassifier` + `TableVectorizer`, month-by-month temporal CV 
+## The game {.smaller}
 
+::: {.columns}
+
+::: {.column}
+
+- World of Warcraft (WoW) is a **subscription-based** MMORPG released in 2004 by
+Blizzard Entertainment. 
+- In WoW, players chreate **character avatars** to navigate the open game world
+and perform various activities. 
+- Players level up their caracters to make them more powerful. 
+- Player characters belong to a **faction** (Alliance or Horde), have a **race** 
+and a **class**.
+
+:::
+
+::: {.column}
+
+![World of Warcraft original cover](images/World_of_Warcraft.png)
+
+:::
+
+:::
+
+## The problem {.smaller}
+- Since WoW is subscription-based, players pay a monthly fee to play the game. 
+- Some players eventually stop playing, and thus stop paying their subscription.
+
+::: {.callout}
+
+We want to predict which players are likely to churn in the next month, in
+order to enact some measure to keep them from leaving. 
+
+A player **churns** if they have **no activity** for two full months. 
+
+:::
+
+
+::: {.fragment}
+
+- Our "unit of analysis" is a (player character, month) pair. 
+- Each pair tells us whether the given player character played on the given month.
+
+
+:::
+
+
+
+
+## The dataset {.smaller}
+
+
+::: {.columns}
+
+::: {.column}
+
+
+- **Dataset**: World of Warcraft Avatar history Dataset [^1]
+- ~35.6M timestamped "character is active" lines (**heartbeats**). 
+- Heartbeats are stored in txt files, grouped by day and quarter. 
+- Time range: 2005-12-31 / 2009-01-10 in the 
+**Taiwanese server**.
+- Two expansions are included in the range:
+  - The Burning Crusade (April 3, 2007)
+  - Wrath of the Lich King (November 18, 2008).  
+
+
+:::
+
+::: {.column}
+
+
+
+```
+# cut output of tree WoWAH
+WoWAH
+├── 2006_01_03
+│   ├── 2006-01-01
+│   │   ├── 00-03-56.txt
+│   │   ├── 00-13-43.txt
+│   │   ├── 00-23-48.txt
+│   │   ├── 00-33-48.txt
+│   │   ├── ...
+│   ├── 2006-01-02
+│   ├── ...
+├── 2006_04_06
+├── ...
+```
+
+:::
+
+:::
+
+[^1]: [Source](https://web.cs.wpi.edu/~claypool/mmsys-dataset/2011/wow/)
+
+
+## The dataset {.smaller}
+
+
+::: {.columns}
+
+::: {.column}
+
+- Training samples are plain text, with custom formatting.
+- A custom parser must be used to convert the samples and extract the correct dtypes.
+
+
+:::
+
+::: {.column}
+
+```
+# head WoWAH/2006_01_03/2006-01-01/00-03-56.txt 
+Persistent_Storage = {
+	[1] = "0, 12/31/05 23:59:46, 1,0, , 5, Orc, Warrior, Durotar, no, 0",
+	[2] = "0, 12/31/05 23:59:46, 1,1, , 9, Orc, Shaman, Durotar, yes, 0",
+	[3] = "0, 12/31/05 23:59:52, 2,2, , 13, Orc, Shaman, Durotar, no, 0",
+	[4] = "0, 12/31/05 23:59:52, 2,3,0, 14, Orc, Warrior, Durotar, no, 0",
+	[5] = "0, 12/31/05 23:59:52, 2,4, , 14, Orc, Shaman, Durotar, yes, 0",
+	[6] = "0, 12/31/05 23:59:52, 2,5, , 16, Orc, Hunter, The Barrens, yes, 0",
+	[7] = "0, 12/31/05 23:59:52, 2,6, , 18, Orc, Warlock, The Barrens, no, 0",
+	[8] = "0, 12/31/05 23:59:52, 2,7, , 17, Orc, Hunter, Silverpine Forest, yes, 0",
+
+```
+
+
+:::
+
+:::
+
+## The datasets: some statistics {.smaller}
+
+![](reports/exploration/levels_over_time.png)
+
+
+## The datasets: some statistics {.smaller auto-animate="true"}
+![](reports/exploration/characters_by_month.png)
+
+## The dataset: `TableReport`
+
+
+
+## Feature engineering {.smaller}
+
+- Session-based features (`skrub.SessionEncoder`)
+  - Number of sessions, duration, distribution during the day... 
+- Monthly aggregates 
+  - Statistics by class, race, overall playerbase...
+- Location-based features
+  - Zone rarity, where players spend their time
+- Lagged features 
+- `skrub.TableVectorizer` to encode 
+
+More detail about feature engineering and model selection is available in the full technical report. 
+
+## Model selection
+
+- `HistGradientBoostingClassifier` as the evaluation model
+- Month-by-month temporal CV
+- Hyperparameter tuning with Data Ops and Optuna
 
 ::: {.callout-important}
 
-Model optimization is _intentionally_ not the focus of this talk. 
+Model optimization is intentionally **not the focus** of this talk. 
 
 :::
 
 
 
-## Pain point 1 — Leakage in temporal feature engineering {.smaller}
+## Caveats
+- While we are interested in **players**, we have information only about their 
+**avatars**. A player may stop playing with an avatar, but keep paying the subscription. 
+- As this is past data, we cannot actually evaluate the effectiveness of whatever
+measure we decide to implement, so we can only try to **predict player behavior**. 
+
+
+# Act 3: The implementation
+
+## Pain point 1 - Data ingestion is part of the pipeline {.smaller}
+
+
+
+::: {.columns}
+
+::: {.column}
+- Data is not in a clean format:
+  - Heartbeats are in text files scattered over hundreds of folders
+  - Logs need to be resampled to have (character, month) granularity
+- The same transformations (and all other **learned states**) need to be replayed
+on new data. 
+- Glue code and pre-processing scripts are brittle and prone to errors.
+
+:::
+
+::: {.column}
+
+
+```{.python code-line-numbers="|3-4,9-11|6-7,13-14"}
+import skrub
+
+def draft_loader():
+  return pd.read_csv("path/to/file.csv")
+
+def prod_loader():
+  return api.fetch().to_pandas()
+
+loader = skrub.var("loader", draft_loader, becomes_default=True)
+# build the DAG  
+learner = data_op.skb.make_learner(fitted=True)
+
+# Use a different loader to get production data
+learner.predict({"loader": prod_loader})
+
+# No changes needed by the learner!
+
+```
+
+:::
+
+:::
+
+
+## Pain point 1 - Data preparation is part of the pipeline {.smaller}
+
+In our Data Op plan:
+
+1. The input dataset is a list of plaintext files
+2. The pipeline reads each file, removes bloat lines, parses each heartbeat
+3. Heartbeats are converted to a polars lazyframe to serve as `historical` for
+the rest of the pipeline
+4. Builds the churn dataset by aggregating the available data over player character
+ and month
+
+The target is built **inside** of the pipeline. 
+
+
+## Pain point 2 — Leakage in temporal feature engineering {.smaller}
 
 - Features must only use data available at scoring time
 - Session detection and aggregations are **stateful w.r.t. time**: doing them once on the full table leaks the future
-- sklearn `Pipeline` cannot do this: `X`/`y` must exist before the pipeline starts, and wrangling lives outside
-- skrub docs warn explicitly: *aggregation can introduce data leakage* → wrap it in the DataOps plan
+- sklearn `Pipeline` cannot do this: `X`/`y` must exist **before** the pipeline starts, and wrangling lives outside
+- we are performing aggregations over different, time-aware splits
 - In the example: `X` and `y` are cut **inside** the plan (`mark_as_X` / `mark_as_y`), so each CV fold re-runs the feature code on training data only
 
 ::: {.notes}
@@ -318,47 +583,6 @@ class Splitter:
  pred = X.skb.apply(LogisticRegression())</code></pre>
 ```
 
-## Pain point 4 — One pipeline object, many inputs {.smaller}
-
-
-::: {.columns}
-
-::: {.column}
-
-- Multi-input pipelines are usually scattered across scripts
-- Input methods can differ between model setup and production (read from file, fetch an API...)
-- The final DataOp behaves like one sklearn estimator: `.fit()`, save, load, `skb.eval(env)`, `skb.cross_validate(env)`
-- Production: replay the *exact* trained DAG on new data, no need for glue code
-
-:::
-
-::: {.column}
-
-
-```{.python code-line-numbers="|3-4,9-11|6-7,13-14"}
-import skrub
-
-def draft_loader():
-  return pd.read_csv("path/to/file.csv")
-
-def prod_loader():
-  return api.fetch().to_pandas()
-
-loader = skrub.var("loader", draft_loader, becomes_default=True)
-# build the DAG  
-learner = data_op.skb.make_learner(fitted=True)
-
-# Use a different loader to get production data
-learner.predict({"loader": prod_loader})
-
-# No changes needed by the learner!
-
-```
-
-:::
-
-:::
-
 ## Pain point 5 — Debugging a complex DAG
 
 - Data Ops work **lazily**: they need to evaluate all nodes in the DAG to run
@@ -366,6 +590,9 @@ learner.predict({"loader": prod_loader})
 - `skb.report()` emits an HTML report: every node's name, description, predecessors, fitted estimator, and **data preview**
 - On failure, the report shows the offending node and the traceback
 
+## Pain point 5 - Debugging a complex DAG
+
+<iframe src="reports/execution_report/index.html" width="100%" height="480px" style="border: 1px solid #ccc; border-radius: 4px;"> </iframe>
 
 ## Pain point 7 — Stay in your dataframe API inside the plan {.smaller}
 

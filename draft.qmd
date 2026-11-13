@@ -42,8 +42,21 @@ refer to the [repository](https://github.com/rcap107/wowah-sessionization).
 We rely on the [World of Warcraft Avatar History](https://qualinet.github.io/databases/world_of_warcraft_avatar_history_dataset/). 
 The dataset is built by scanning the game's servers roughly every 10 minutes, and
 logging information about each **user character** in the Horde faction that is
-found online at the timestamp's time. As we have a sequence of timestamps, this
+found online at the timestamp's time. As we have a sequence of timestamps, this 
 lets us track the behavior of players over time. 
+
+::: {.callout-note}
+#### Expansion dates: the Taiwanese release
+
+WoWAH was collected on the Taiwanese realm *Light's Hope*, so it follows the
+Taiwan/Hong Kong release schedule rather than the North American/European one.
+*The Burning Crusade* launched there on **3 April 2007** (16 January 2007 in
+NA/EU), and *Wrath of the Lich King* on **18 November 2008** (13 November 2008
+in NA/EU). The data reflects the local timeline: the first Blood Elves, Outland
+zones and characters above level 60 appear on 3 April 2007, and the first Death
+Knights and Northrend zones on 19 November 2008. Time-based features and the
+interpretation of the plots should therefore use these realm-specific dates.
+:::
 
 
 ::: {.callout-important}

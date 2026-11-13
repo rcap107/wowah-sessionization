@@ -34,6 +34,7 @@ Let `M` be the month in which we score a character (and could act on it).
 |---|---|
 | `main.py` | Builds the skrub DataOps plan (target, feature table, `TableVectorizer`, `HistGradientBoostingClassifier`), the `Splitter`, and the `evaluate`, `cross_validate` and `random_search` entry points |
 | `add_churn.py` | Builds the `(char, month)` table with `has_played`, `churn` and the target `churn_next` (`build_churn_dataset`) |
+| `explore_data.py` | Exploratory profiling of the heartbeat parquet: attributes, per-character activity, heartbeat gaps, sessions, monthly activity, and a `skrub` report on a character sample (`pixi run explore`) |
 | `adding_features.py` | Session, monthly player, class, location (zone rarity, hubs, Gini) and lag/diff features |
 | `src/utils.py` | `sample_by_user` (sample whole character histories) and `get_session_duration` |
 | `src/parse_to_single_table.py`, `src/convert_to_parquet.py` | Parse the raw WoWAH `.txt` logs to CSV, then to parquet |
@@ -91,5 +92,6 @@ Searched hyperparameters: `session_gap` (15, 30 or 60 minutes), whether to use
 location features, the lags (none, 1, 1-2 or 1-2-3 months) and the learning
 rate of the gradient boosting model.
 
-Other tasks: `pixi run churn` prints the churn table, and
-`pixi run -e docs render` renders the documents.
+Other tasks: `pixi run churn` prints the churn table, `pixi run explore` profiles
+the full heartbeat dataset (HTML report and plots in `reports/exploration/`),
+and `pixi run -e docs render` renders the documents.
