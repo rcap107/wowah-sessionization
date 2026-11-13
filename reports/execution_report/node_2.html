@@ -1,0 +1,343 @@
+
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DataOp report</title>
+    <style>
+     html {
+    font-family: sans-serif;
+    --current-node-color: #15ed8f;
+}
+
+h1,h2,h3,h4 {
+    margin-top: 0.6em;
+    margin-bottom: 0.2em;
+    margin-left: 0;
+    margin-right: 0;
+}
+h1 {
+    margin-top: 0;
+}
+
+ul {
+    margin: 0.1em;
+}
+
+* *::before, *::after {
+    box-sizing: border-box;
+}
+
+pre, code {
+    font-size: 1rem;
+}
+
+.docstring-details summary {
+    cursor: pointer;
+}
+
+.docstring-details {
+    margin: 1em 0;
+}
+
+#graph-nav text {
+    transform: translateY(2px);
+}
+
+.data_op-node-wrapper {
+    overflow-x: auto;
+}
+
+.mini-nav > ul {
+    display: grid;
+    grid-template-columns: 10ch 10ch 10ch;
+    list-style-type: none;
+}
+
+.data_op-node {
+    display: flex;
+    height: 100%;
+}
+
+.data_op-node > * {
+    padding: 1rem;
+    max-height: 100%;
+    overflow-y: auto;
+}
+
+.data_op-node > nav.main-nav {
+    border-right: 2px solid #ccc;
+    flex-shrink: 0;
+}
+
+.node-details {
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+.data_op-node > nav.main-nav {
+    resize: horizontal;
+    min-width: 8rem;
+    /* A wide graph scrolls rather than squeezing the node details. */
+    max-width: 75vw;
+    box-sizing: border-box;
+}
+
+.data_op-node > .node-frame {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    padding: 0;
+    border: none;
+    width: 100%;
+    height: 100%;
+}
+
+/* Node pages are displayed inside the iframe of the index page: they fill it
+   and scroll as a whole. */
+.node-page {
+    margin: 0;
+}
+
+.node-page .data_op-node {
+    display: block;
+    height: auto;
+}
+
+.node-page .data_op-node > * {
+    max-height: none;
+    overflow-y: visible;
+}
+
+.node-page .node-details {
+    min-height: 100vh;
+}
+
+.node-details[data-has-error]{
+    background: #ffcccc;
+}
+
+.node-details[data-is-skipped]{
+    background: #eee;
+}
+
+.is-skipped-message{
+    background: #eee;
+    padding: 0 1em 1em 1em;
+    border: 1px solid black;
+}
+
+.is-skipped-message + * {
+    margin-top: 1em;
+}
+
+.node-creation-stack {
+    font-size: 1rem;
+}
+
+.node-creation-stack a {
+    text-decoration: none;
+}
+
+.node-creation-stack .node-creation-stack-line {
+    display: block;
+    margin-left: 2em;
+}
+
+.main-nav:not([data-is-open]){
+    display: none;
+}
+
+.nav-legend-current-node {
+    display: flex;
+    background: var(--current-node-color);
+    border: 4px solid black;
+    font-size: 1.2rem;
+    padding: 3px;
+}
+
+.nav-legend-current-node + * {
+    margin-top: 2rem;
+}
+
+/* Layout of the index page: a header (toggle button and report title), below
+   it the graph and the iframe displaying the selected node. */
+.report-index {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.report-header {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+}
+
+.report-index > .data_op-node-wrapper {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.report-index .data_op-node {
+    flex: 1;
+    min-height: 0;
+}
+
+.icon-button {
+    flex: none;
+    padding: 2px;
+    width: 24px;
+    height: 24px;
+}
+
+.report-title {
+    margin: 0;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.error-node polygon {
+    stroke: red;
+    stroke-width: 3;
+}
+
+.skipped-node polygon {
+    stroke-dasharray: 4;
+}
+    </style>
+    <script>
+ // Tell index.html (which displays this page in an iframe) which node is shown
+ // (null when no particular node is).
+ if (window.parent !== window) {
+     window.parent.postMessage(
+         {type: "skrub-report-node-shown", nodeId: 2}, "*");
+ }
+</script>
+</head>
+
+<body class="node-page">
+    <div class="data_op-node-wrapper">
+        <div class="data_op-node">
+            <div class="node-details" 
+                >
+                <h1>CallMethod &#39;with_columns&#39;</h1>
+                <div><pre><code></code></pre></div>
+                <nav class="mini-nav">
+                    <ul>
+                        <li>
+                            
+                            <a href="node_1.html">previous</a>
+                            
+                        </li>
+                        <li>
+                            
+                            <a href="node_3.html">next</a>
+                            
+                        </li>
+                    </ul>
+                </nav>
+                <samp>ID:</samp> <samp>184499257305142297538419464460957280254</samp>
+                
+                <div>
+                    
+
+                    <h3>This step uses:</h3>
+                    <ul>
+                        
+                        <li><a href="node_1.html">1:
+                                Call &#39;load&#39;</a></li>
+                        
+                    </ul>
+                </div>
+
+                <div>
+                    <h3>This step is used by:</h3>
+                    <ul>
+                        
+                        <li><a href="node_3.html">3:
+                                query | Call &#39;build_churn_dataset&#39;</a></li>
+                        
+                        <li><a href="node_6.html">6:
+                                CallMethod &#39;collect&#39;</a></li>
+                        
+                    </ul>
+                </div>
+
+                <div>
+                    <h3>Where was this step created?</h3>
+                    <pre><code class="node-creation-stack">File <a href="python/efa1c22e62e33a59d040fffcaad48c26251e3ffc080694f8e04fa316acb71e12.html#L414">/Users/rcap/work/wowah-sessionization/main.py, line 414</a>, in &lt;module&gt;
+<span class="node-creation-stack-line">results, data_op = evaluate(args.env, load_fraction=args.fraction)</span>File <a href="python/efa1c22e62e33a59d040fffcaad48c26251e3ffc080694f8e04fa316acb71e12.html#L354">/Users/rcap/work/wowah-sessionization/main.py, line 354</a>, in evaluate
+<span class="node-creation-stack-line">data_op = make_data_op(load_fraction=load_fraction)</span>File <a href="python/efa1c22e62e33a59d040fffcaad48c26251e3ffc080694f8e04fa316acb71e12.html#L268">/Users/rcap/work/wowah-sessionization/main.py, line 268</a>, in make_data_op
+<span class="node-creation-stack-line">historical_data = historical_data.with_columns(</span></code></pre>
+                </div>
+                
+
+                
+                <div>
+                    <h3>Computation time</h3>
+                    <code>0h 0m 5.5e-05s</code>
+                </div>
+                
+
+                
+                
+                
+
+                
+                <div>
+                    <h2>Output of this step</h2>
+
+                    
+                    <div>
+                        <h4>NAIVE QUERY PLAN</h4><p>run <b>LazyFrame.show_graph()</b> to see the optimized version</p><?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<!-- Generated by graphviz version 16.1.1 (20261108.1752)
+ -->
+<!-- Title: polars_query Pages: 1 -->
+<svg width="857pt" height="123pt"
+ viewBox="0.00 0.00 857.00 123.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(4 118.5)">
+<title>polars_query</title>
+<polygon fill="white" stroke="none" points="-4,4 -4,-118.5 853.25,-118.5 853.25,4 -4,4"/>
+<!-- p2 -->
+<g id="node1" class="node">
+<title>p2</title>
+<polygon fill="none" stroke="black" points="453.25,-42.5 396,-42.5 396,0 453.25,0 453.25,-42.5"/>
+<text xml:space="preserve" text-anchor="middle" x="424.62" y="-25.2" font-family="Monospace" font-size="14.00">TABLE</text>
+<text xml:space="preserve" text-anchor="middle" x="424.62" y="-7.95" font-family="Monospace" font-size="14.00">π */7</text>
+</g>
+<!-- p1 -->
+<g id="node2" class="node">
+<title>p1</title>
+<polygon fill="none" stroke="black" points="849.25,-114.5 0,-114.5 0,-78.5 849.25,-78.5 849.25,-114.5"/>
+<text xml:space="preserve" text-anchor="middle" x="424.62" y="-91.83" font-family="Monospace" font-size="14.00">WITH COLUMNS [when(col(&quot;guild&quot;) == &#45;1).then(null.cast(Int32)).otherwise(col(&quot;guild&quot;)).alias(&quot;guild&quot;)]</text>
+</g>
+<!-- p2&#45;&gt;p1 -->
+<g id="edge1" class="edge">
+<title>p2&#45;&gt;p1</title>
+<path fill="none" stroke="black" d="M424.62,-42.65C424.62,-50.16 424.62,-58.81 424.62,-66.91"/>
+<polygon fill="black" stroke="black" points="421.13,-66.67 424.63,-76.67 428.13,-66.67 421.13,-66.67"/>
+</g>
+</g>
+</svg>
+
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

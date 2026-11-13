@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600" font-family="sans-serif">
+  <rect x="0" y="0" width="800" height="600" fill="#ffffff"/>
+
+  <!-- ================= Top progress bar (4 splits) ================= -->
+  <g id="progress-bar">
+    <rect x="50" y="50" width="175" height="40" fill="#90caf9" stroke="#1565c0" stroke-width="2"/>
+    <text x="137.5" y="70.0" text-anchor="middle" dominant-baseline="middle" font-size="16" font-weight="600" fill="#0d47a1">Split 1</text>
+
+    <rect x="225" y="50" width="175" height="40" fill="#90caf9" stroke="#1565c0" stroke-width="2"/>
+    <text x="312.5" y="70.0" text-anchor="middle" dominant-baseline="middle" font-size="16" font-weight="600" fill="#0d47a1">Split 2</text>
+
+    <rect x="400" y="50" width="175" height="40" fill="#ffffff" stroke="#cccccc" stroke-width="2"/>
+    <text x="487.5" y="70.0" text-anchor="middle" dominant-baseline="middle" font-size="16" fill="#999999">Split 3</text>
+
+    <rect x="575" y="50" width="175" height="40" fill="#ffffff" stroke="#cccccc" stroke-width="2"/>
+    <text x="662.5" y="70.0" text-anchor="middle" dominant-baseline="middle" font-size="16" fill="#999999">Split 4</text>
+  </g>
+
+  <!-- ================= Features matrix X: 5 columns ================= -->
+  <g id="matrix-x">
+    <text x="50" y="129" font-size="16" font-weight="600" fill="#333333">Features Matrix X</text>
+
+    <rect x="50" y="140" width="250" height="216" fill="#ffffff"/>
+
+    <!-- column headers -->
+    <rect x="50" y="140" width="50" height="24" fill="#1565c0"/>
+    <text x="75" y="152.0" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="#ffffff">id</text>
+
+    <rect x="100" y="140" width="50" height="24" fill="#90caf9"/>
+    <text x="125" y="152.0" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="#0d47a1">f1</text>
+
+    <rect x="150" y="140" width="50" height="24" fill="#90caf9"/>
+    <text x="175" y="152.0" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="#0d47a1">f2</text>
+
+    <rect x="200" y="140" width="50" height="24" fill="#90caf9"/>
+    <text x="225" y="152.0" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="#0d47a1">f3</text>
+
+    <rect x="250" y="140" width="50" height="24" fill="#90caf9"/>
+    <text x="275" y="152.0" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="#0d47a1">f4</text>
+
+    <!-- header cell separators -->
+    <line x1="100" y1="140" x2="100" y2="164" stroke="#ffffff" stroke-width="1" opacity="0.7"/>
+    <line x1="150" y1="140" x2="150" y2="164" stroke="#ffffff" stroke-width="1" opacity="0.7"/>
+    <line x1="200" y1="140" x2="200" y2="164" stroke="#ffffff" stroke-width="1" opacity="0.7"/>
+    <line x1="250" y1="140" x2="250" y2="164" stroke="#ffffff" stroke-width="1" opacity="0.7"/>
+    <line x1="50" y1="164" x2="300" y2="164" stroke="#333333" stroke-width="1" opacity="0.5"/>
+
+    <!-- 8 data rows: top 4 active -->
+    <rect x="50" y="164" width="250" height="24" fill="#90caf9"/>
+    <rect x="50" y="188" width="250" height="24" fill="#90caf9"/>
+    <rect x="50" y="212" width="250" height="24" fill="#90caf9"/>
+    <rect x="50" y="236" width="250" height="24" fill="#90caf9"/>
+    <rect x="50" y="260" width="250" height="24" fill="#ffffff"/>
+    <rect x="50" y="284" width="250" height="24" fill="#ffffff"/>
+    <rect x="50" y="308" width="250" height="24" fill="#ffffff"/>
+    <rect x="50" y="332" width="250" height="24" fill="#ffffff"/>
+
+    <!-- row grid -->
+    <line x1="50" y1="188" x2="300" y2="188" stroke="#1565c0" stroke-width="1.25" opacity="1"/>
+    <line x1="50" y1="212" x2="300" y2="212" stroke="#1565c0" stroke-width="1.25" opacity="1"/>
+    <line x1="50" y1="236" x2="300" y2="236" stroke="#1565c0" stroke-width="1.25" opacity="1"/>
+    <line x1="50" y1="260" x2="300" y2="260" stroke="#1565c0" stroke-width="1.25" opacity="1"/>
+    <line x1="50" y1="284" x2="300" y2="284" stroke="#e0e0e0" stroke-width="1" opacity="1"/>
+    <line x1="50" y1="308" x2="300" y2="308" stroke="#e0e0e0" stroke-width="1" opacity="1"/>
+    <line x1="50" y1="332" x2="300" y2="332" stroke="#e0e0e0" stroke-width="1" opacity="1"/>
+
+    <!-- column grid: grey separators on every row, blue key border -->
+    <line x1="100" y1="164" x2="100" y2="356" stroke="#1565c0" stroke-width="1.2" opacity="0.85"/>
+    <line x1="150" y1="164" x2="150" y2="356" stroke="#90a4ae" stroke-width="0.8" opacity="0.8"/>
+    <line x1="200" y1="164" x2="200" y2="356" stroke="#90a4ae" stroke-width="0.8" opacity="0.8"/>
+    <line x1="250" y1="164" x2="250" y2="356" stroke="#90a4ae" stroke-width="0.8" opacity="0.8"/>
+
+    <!-- row keys -->
+    <text x="75" y="176" text-anchor="middle" dominant-baseline="middle" font-size="9" font-weight="700" fill="#0d47a1">k1</text>
+    <text x="75" y="200" text-anchor="middle" dominant-baseline="middle" font-size="9" font-weight="700" fill="#0d47a1">k2</text>
+    <text x="75" y="224" text-anchor="middle" dominant-baseline="middle" font-size="9" font-weight="700" fill="#0d47a1">k3</text>
+    <text x="75" y="248" text-anchor="middle" dominant-baseline="middle" font-size="9" font-weight="700" fill="#0d47a1">k4</text>
+    <text x="75" y="272" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="#999999">k5</text>
+    <text x="75" y="296" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="#999999">k6</text>
+    <text x="75" y="320" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="#999999">k7</text>
+    <text x="75" y="344" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="#999999">k8</text>
+
+    <rect x="50" y="140" width="250" height="216" fill="none" stroke="#333333" stroke-width="2"/>
+  </g>
+
+  <!-- ================= External table T: 3 columns ================= -->
+  <g id="external-table-t">
+    <text x="500" y="129" font-size="16" font-weight="600" fill="#333333">External Table T</text>
+
+    <rect x="500" y="140" width="250" height="216" fill="#ffffff"/>
+
+    <!-- column headers -->
+    <rect x="500" y="140" width="83.333" height="24" fill="#f57f17"/>
+    <text x="541.667" y="152.0" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="#ffffff">id</text>
+
+    <rect x="583.333" y="140" width="83.333" height="24" fill="#ffe082"/>
+    <text x="625" y="152.0" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="#f57f17">t1</text>
+
+    <rect x="666.667" y="140" width="83.333" height="24" fill="#ffe082"/>
+    <text x="708.333" y="152.0" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="#f57f17">t2</text>
+
+    <!-- header cell separators -->
+    <line x1="583.333" y1="140" x2="583.333" y2="164" stroke="#ffffff" stroke-width="1" opacity="0.7"/>
+    <line x1="666.667" y1="140" x2="666.667" y2="164" stroke="#ffffff" stroke-width="1" opacity="0.7"/>
+    <line x1="500" y1="164" x2="750" y2="164" stroke="#333333" stroke-width="1" opacity="0.5"/>
+
+    <!-- fixed T keys; highlighted rows join with the current split -->
+    <rect x="500" y="164" width="250" height="24" fill="#ffe082"/>
+    <rect x="500" y="188" width="250" height="24" fill="#ffe082"/>
+    <rect x="500" y="212" width="250" height="24" fill="#ffe082"/>
+    <rect x="500" y="236" width="250" height="24" fill="#ffffff"/>
+    <rect x="500" y="260" width="250" height="24" fill="#ffffff"/>
+    <rect x="500" y="284" width="250" height="24" fill="#ffffff"/>
+    <rect x="500" y="308" width="250" height="24" fill="#ffffff"/>
+    <rect x="500" y="332" width="250" height="24" fill="#ffffff"/>
+
+    <!-- row grid -->
+    <line x1="500" y1="188" x2="750" y2="188" stroke="#f57f17" stroke-width="1.25" opacity="1"/>
+    <line x1="500" y1="212" x2="750" y2="212" stroke="#f57f17" stroke-width="1.25" opacity="1"/>
+    <line x1="500" y1="236" x2="750" y2="236" stroke="#f57f17" stroke-width="1.25" opacity="1"/>
+    <line x1="500" y1="260" x2="750" y2="260" stroke="#e0e0e0" stroke-width="1" opacity="1"/>
+    <line x1="500" y1="284" x2="750" y2="284" stroke="#e0e0e0" stroke-width="1" opacity="1"/>
+    <line x1="500" y1="308" x2="750" y2="308" stroke="#e0e0e0" stroke-width="1" opacity="1"/>
+    <line x1="500" y1="332" x2="750" y2="332" stroke="#e0e0e0" stroke-width="1" opacity="1"/>
+
+    <!-- column grid: grey separator, orange key border -->
+    <line x1="583.333" y1="164" x2="583.333" y2="356" stroke="#f57f17" stroke-width="1.2" opacity="0.85"/>
+    <line x1="666.667" y1="164" x2="666.667" y2="356" stroke="#90a4ae" stroke-width="0.8" opacity="0.8"/>
+
+    <!-- fixed keys, highlighted when joined -->
+    <text x="541.667" y="176" text-anchor="middle" dominant-baseline="middle" font-size="9" font-weight="700" fill="#f57f17">k1</text>
+    <text x="541.667" y="200" text-anchor="middle" dominant-baseline="middle" font-size="9" font-weight="700" fill="#f57f17">k3</text>
+    <text x="541.667" y="224" text-anchor="middle" dominant-baseline="middle" font-size="9" font-weight="700" fill="#f57f17">k4</text>
+    <text x="541.667" y="248" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="#999999">k6</text>
+    <text x="541.667" y="272" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="#999999">k7</text>
+    <text x="541.667" y="296" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="#999999">k8</text>
+    <text x="541.667" y="320" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="#999999">k9</text>
+    <text x="541.667" y="344" text-anchor="middle" dominant-baseline="middle" font-size="9" fill="#999999">k10</text>
+
+    <rect x="500" y="140" width="250" height="216" fill="none" stroke="#333333" stroke-width="2"/>
+  </g>
+
+  <!-- ================= Left join arrow ================= -->
+  <g id="join-arrow">
+    <line x1="342" y1="248" x2="438" y2="248" stroke="#333333" stroke-width="5" stroke-linecap="round"/>
+    <polygon points="458,248 436,235 436,261" fill="#333333"/>
+    <text x="400" y="226" text-anchor="middle" font-size="12" font-weight="700" letter-spacing="1.5" fill="#333333">LEFT JOIN</text>
+  </g>
+
+  <!-- ================= Resulting dataset J: 5 + 2 columns ================= -->
+  <g id="result-bar">
+    <text x="175" y="392" font-size="15" font-weight="600" fill="#333333">Resulting Dataset</text>
+
+    <rect x="175" y="404" width="450" height="87" fill="#ffffff"/>
+
+    <!-- header: X-origin columns -->
+    <rect x="175" y="404" width="64.286" height="24" fill="#1565c0"/>
+    <text x="207.143" y="416.0" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="#ffffff">id</text>
+
+    <rect x="239.286" y="404" width="64.286" height="24" fill="#90caf9"/>
+    <text x="271.429" y="416.0" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="#0d47a1">f1</text>
+
+    <rect x="303.571" y="404" width="64.286" height="24" fill="#90caf9"/>
+    <text x="335.714" y="416.0" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="#0d47a1">f2</text>
+
+    <rect x="367.857" y="404" width="64.286" height="24" fill="#90caf9"/>
+    <text x="400" y="416.0" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="#0d47a1">f3</text>
+
+    <rect x="432.143" y="404" width="64.286" height="24" fill="#90caf9"/>
+    <text x="464.286" y="416.0" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="#0d47a1">f4</text>
+
+    <!-- header: T-origin columns -->
+    <rect x="496.429" y="404" width="64.286" height="24" fill="#ffe082"/>
+    <text x="528.571" y="416.0" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="#f57f17">t1</text>
+
+    <rect x="560.714" y="404" width="64.286" height="24" fill="#ffe082"/>
+    <text x="592.857" y="416.0" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="#f57f17">t2</text>
+
+    <!-- header cell separators -->
+    <line x1="239.286" y1="404" x2="239.286" y2="428" stroke="#ffffff" stroke-width="1" opacity="0.75"/>
+    <line x1="303.571" y1="404" x2="303.571" y2="428" stroke="#ffffff" stroke-width="1" opacity="0.75"/>
+    <line x1="367.857" y1="404" x2="367.857" y2="428" stroke="#ffffff" stroke-width="1" opacity="0.75"/>
+    <line x1="432.143" y1="404" x2="432.143" y2="428" stroke="#ffffff" stroke-width="1" opacity="0.75"/>
+    <line x1="560.714" y1="404" x2="560.714" y2="428" stroke="#ffffff" stroke-width="1" opacity="0.75"/>
+
+    <!-- populated rows -->
+    <rect x="175" y="428" width="321.429" height="15.75" fill="#90caf9" fill-opacity="0.55"/>
+    <rect x="496.429" y="428" width="64.286" height="15.75" fill="#ffe082" fill-opacity="0.9"/>
+    <rect x="560.714" y="428" width="64.286" height="15.75" fill="#ffe082" fill-opacity="0.9"/>
+    <rect x="175" y="443.75" width="321.429" height="15.75" fill="#90caf9" fill-opacity="0.55"/>
+    <rect x="496.429" y="443.75" width="64.286" height="15.75" fill="#f2f2f2" fill-opacity="1"/>
+    <rect x="560.714" y="443.75" width="64.286" height="15.75" fill="#f2f2f2" fill-opacity="1"/>
+    <rect x="175" y="459.5" width="321.429" height="15.75" fill="#90caf9" fill-opacity="0.55"/>
+    <rect x="496.429" y="459.5" width="64.286" height="15.75" fill="#ffe082" fill-opacity="0.9"/>
+    <rect x="560.714" y="459.5" width="64.286" height="15.75" fill="#ffe082" fill-opacity="0.9"/>
+    <rect x="175" y="475.25" width="321.429" height="15.75" fill="#90caf9" fill-opacity="0.55"/>
+    <rect x="496.429" y="475.25" width="64.286" height="15.75" fill="#ffe082" fill-opacity="0.9"/>
+    <rect x="560.714" y="475.25" width="64.286" height="15.75" fill="#ffe082" fill-opacity="0.9"/>
+
+    <!-- horizontal grid -->
+    <line x1="175" y1="428" x2="625" y2="428" stroke="#333333" stroke-width="1.25" opacity="0.55"/>
+    <line x1="175" y1="443.75" x2="625" y2="443.75" stroke="#d5dbde" stroke-width="0.75"/>
+    <line x1="175" y1="459.5" x2="625" y2="459.5" stroke="#d5dbde" stroke-width="0.75"/>
+    <line x1="175" y1="475.25" x2="625" y2="475.25" stroke="#d5dbde" stroke-width="0.75"/>
+
+    <!-- vertical cell separators -->
+    <line x1="239.286" y1="428" x2="239.286" y2="491" stroke="#546e7a" stroke-width="0.9" opacity="0.7"/>
+    <line x1="303.571" y1="428" x2="303.571" y2="491" stroke="#546e7a" stroke-width="0.9" opacity="0.7"/>
+    <line x1="367.857" y1="428" x2="367.857" y2="491" stroke="#546e7a" stroke-width="0.9" opacity="0.7"/>
+    <line x1="432.143" y1="428" x2="432.143" y2="491" stroke="#546e7a" stroke-width="0.9" opacity="0.7"/>
+    <line x1="560.714" y1="428" x2="560.714" y2="491" stroke="#546e7a" stroke-width="0.9" opacity="0.7"/>
+
+    <!-- join seam between X and T columns -->
+    <line x1="496.429" y1="404" x2="496.429" y2="491" stroke="#333333" stroke-width="1.5" opacity="0.85"/>
+
+    <!-- row content -->
+    <text x="207.143" y="435.875" text-anchor="middle" dominant-baseline="middle" font-size="9" font-weight="700" fill="#0d47a1">k1</text>
+    <text x="207.143" y="451.625" text-anchor="middle" dominant-baseline="middle" font-size="9" font-weight="700" fill="#0d47a1">k2</text>
+    <text x="528.571" y="451.625" text-anchor="middle" dominant-baseline="middle" font-size="9.5" font-style="italic" fill="#8a8a8a">null</text>
+    <text x="592.857" y="451.625" text-anchor="middle" dominant-baseline="middle" font-size="9.5" font-style="italic" fill="#8a8a8a">null</text>
+    <text x="207.143" y="467.375" text-anchor="middle" dominant-baseline="middle" font-size="9" font-weight="700" fill="#0d47a1">k3</text>
+    <text x="207.143" y="483.125" text-anchor="middle" dominant-baseline="middle" font-size="9" font-weight="700" fill="#0d47a1">k4</text>
+
+    <rect x="175" y="404" width="450" height="87" fill="none" stroke="#333333" stroke-width="2"/>
+  </g>
+
+  <!-- ================= Sample counter ================= -->
+  <text x="400" y="509" text-anchor="middle" font-size="16" font-weight="600" fill="#333333">N = 50 samples</text>
+  <text x="400" y="526" text-anchor="middle" font-size="11" fill="#777777">3 matched · 1 null</text>
+</svg>

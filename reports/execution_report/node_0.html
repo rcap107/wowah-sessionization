@@ -1,0 +1,298 @@
+
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DataOp report</title>
+    <style>
+     html {
+    font-family: sans-serif;
+    --current-node-color: #15ed8f;
+}
+
+h1,h2,h3,h4 {
+    margin-top: 0.6em;
+    margin-bottom: 0.2em;
+    margin-left: 0;
+    margin-right: 0;
+}
+h1 {
+    margin-top: 0;
+}
+
+ul {
+    margin: 0.1em;
+}
+
+* *::before, *::after {
+    box-sizing: border-box;
+}
+
+pre, code {
+    font-size: 1rem;
+}
+
+.docstring-details summary {
+    cursor: pointer;
+}
+
+.docstring-details {
+    margin: 1em 0;
+}
+
+#graph-nav text {
+    transform: translateY(2px);
+}
+
+.data_op-node-wrapper {
+    overflow-x: auto;
+}
+
+.mini-nav > ul {
+    display: grid;
+    grid-template-columns: 10ch 10ch 10ch;
+    list-style-type: none;
+}
+
+.data_op-node {
+    display: flex;
+    height: 100%;
+}
+
+.data_op-node > * {
+    padding: 1rem;
+    max-height: 100%;
+    overflow-y: auto;
+}
+
+.data_op-node > nav.main-nav {
+    border-right: 2px solid #ccc;
+    flex-shrink: 0;
+}
+
+.node-details {
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+.data_op-node > nav.main-nav {
+    resize: horizontal;
+    min-width: 8rem;
+    /* A wide graph scrolls rather than squeezing the node details. */
+    max-width: 75vw;
+    box-sizing: border-box;
+}
+
+.data_op-node > .node-frame {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
+    padding: 0;
+    border: none;
+    width: 100%;
+    height: 100%;
+}
+
+/* Node pages are displayed inside the iframe of the index page: they fill it
+   and scroll as a whole. */
+.node-page {
+    margin: 0;
+}
+
+.node-page .data_op-node {
+    display: block;
+    height: auto;
+}
+
+.node-page .data_op-node > * {
+    max-height: none;
+    overflow-y: visible;
+}
+
+.node-page .node-details {
+    min-height: 100vh;
+}
+
+.node-details[data-has-error]{
+    background: #ffcccc;
+}
+
+.node-details[data-is-skipped]{
+    background: #eee;
+}
+
+.is-skipped-message{
+    background: #eee;
+    padding: 0 1em 1em 1em;
+    border: 1px solid black;
+}
+
+.is-skipped-message + * {
+    margin-top: 1em;
+}
+
+.node-creation-stack {
+    font-size: 1rem;
+}
+
+.node-creation-stack a {
+    text-decoration: none;
+}
+
+.node-creation-stack .node-creation-stack-line {
+    display: block;
+    margin-left: 2em;
+}
+
+.main-nav:not([data-is-open]){
+    display: none;
+}
+
+.nav-legend-current-node {
+    display: flex;
+    background: var(--current-node-color);
+    border: 4px solid black;
+    font-size: 1.2rem;
+    padding: 3px;
+}
+
+.nav-legend-current-node + * {
+    margin-top: 2rem;
+}
+
+/* Layout of the index page: a header (toggle button and report title), below
+   it the graph and the iframe displaying the selected node. */
+.report-index {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.report-header {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+}
+
+.report-index > .data_op-node-wrapper {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.report-index .data_op-node {
+    flex: 1;
+    min-height: 0;
+}
+
+.icon-button {
+    flex: none;
+    padding: 2px;
+    width: 24px;
+    height: 24px;
+}
+
+.report-title {
+    margin: 0;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.error-node polygon {
+    stroke: red;
+    stroke-width: 3;
+}
+
+.skipped-node polygon {
+    stroke-dasharray: 4;
+}
+    </style>
+    <script>
+ // Tell index.html (which displays this page in an iframe) which node is shown
+ // (null when no particular node is).
+ if (window.parent !== window) {
+     window.parent.postMessage(
+         {type: "skrub-report-node-shown", nodeId: 0}, "*");
+ }
+</script>
+</head>
+
+<body class="node-page">
+    <div class="data_op-node-wrapper">
+        <div class="data_op-node">
+            <div class="node-details" 
+                >
+                <h1>Var &#39;raw_files&#39;</h1>
+                <div><pre><code></code></pre></div>
+                <nav class="mini-nav">
+                    <ul>
+                        <li>
+                            
+                        </li>
+                        <li>
+                            
+                            <a href="node_1.html">next</a>
+                            
+                        </li>
+                    </ul>
+                </nav>
+                <samp>ID:</samp> <samp>41213233102966141318156678562952199457</samp>
+                
+                <h2><samp>Name: raw_files</samp></h2>
+                
+                <div>
+                    
+
+                    <h3>This step uses:</h3>
+                    <ul>
+                        
+                    </ul>
+                </div>
+
+                <div>
+                    <h3>This step is used by:</h3>
+                    <ul>
+                        
+                        <li><a href="node_1.html">1:
+                                Call &#39;load&#39;</a></li>
+                        
+                    </ul>
+                </div>
+
+                <div>
+                    <h3>Where was this step created?</h3>
+                    <pre><code class="node-creation-stack">File <a href="python/efa1c22e62e33a59d040fffcaad48c26251e3ffc080694f8e04fa316acb71e12.html#L414">/Users/rcap/work/wowah-sessionization/main.py, line 414</a>, in &lt;module&gt;
+<span class="node-creation-stack-line">results, data_op = evaluate(args.env, load_fraction=args.fraction)</span>File <a href="python/efa1c22e62e33a59d040fffcaad48c26251e3ffc080694f8e04fa316acb71e12.html#L354">/Users/rcap/work/wowah-sessionization/main.py, line 354</a>, in evaluate
+<span class="node-creation-stack-line">data_op = make_data_op(load_fraction=load_fraction)</span>File <a href="python/efa1c22e62e33a59d040fffcaad48c26251e3ffc080694f8e04fa316acb71e12.html#L260">/Users/rcap/work/wowah-sessionization/main.py, line 260</a>, in make_data_op
+<span class="node-creation-stack-line">raw_files = skrub.var(&#34;raw_files&#34;)</span></code></pre>
+                </div>
+                
+
+                
+                <div>
+                    <h2>Output of this step</h2>
+
+                    
+                    <div>
+                        <div style="max-height: 30em; max-width: 95%; overflow: auto;">
+    <samp>
+        <pre>[&#39;data/raw/WoWAH/2006_01_03/2006-01-01/00-03-56.txt&#39;, &#39;data/raw/WoWAH/2006_01_03/2006-01-01/00-13-43.txt&#39;, &#39;data/raw/WoWAH/2006_01_03/2006-01-01/00-23-48.txt&#39;, &#39;data/raw/WoWAH/2006_01_03/2006-01-01/00-33-48.txt&#39;, &#39;data/raw/WoWAH/2006_01_03/2006-01-01/00-43-42.txt&#39;, &#39;data/raw/WoWAH/2006_01_03/2006-01-01/00-53-45.txt&#39;, ...]</pre>
+    </samp>
+</div>
+                    </div>
+                </div>
+                
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

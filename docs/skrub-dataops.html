@@ -9,7 +9,7 @@
 <link href="site_libs/quarto-html/quarto-syntax-highlighting-63b5708e65d6cd79cd7618c58d0c21e7.css" rel="stylesheet" id="quarto-text-highlighting-styles"><meta charset="utf-8">
   <meta name="generator" content="quarto-1.11.9">
 
-  <meta name="author" content="Riccardo Cappuzzo, Jérôme Dockès">
+  <meta name="author" content="Riccardo Cappuzzo">
   <title>WoWAH Player Churn Prediction – Skrub Data Ops: an application to player churn</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -201,7 +201,7 @@
 <section id="title-slide" class="center">
     <h1 class="title">Skrub Data Ops: an application to player churn</h1>
         <p class="subtitle"><a href="https://skrub-data.org/">skrub-data.org</a></p>
-            <p class="author">Riccardo Cappuzzo, Jérôme Dockès</p>
+            <p class="author">Riccardo Cappuzzo</p>
             <p class="institute">Inria P16, <code>:probabl.</code></p>
             <img src="skrub.svg" style="height: 10rem;">
 </section>
@@ -214,6 +214,11 @@
 <li class="fragment"><a href="https://skrub-data.org">skrub-data.org</a></li>
 <li class="fragment">This talk: the <a href="https://skrub-data.org/stable/data_ops.html">skrub DataOps</a> framework.</li>
 </ul>
+</section>
+<section>
+<section id="act-1-skrub-data-ops" class="title-slide slide level1 center">
+<h1>Act 1: skrub Data Ops</h1>
+
 </section>
 <section id="section" class="slide level2 smaller">
 <h2></h2>
@@ -277,6 +282,18 @@ estimator.predict(X_new)</code></pre>
 </section>
 <section id="section-3" class="slide level2">
 <h2></h2>
+<p>To build a ML pipeline, we need to:</p>
+<ul>
+<li>preprocess the data, perform feature engineering, train a model …</li>
+<li>so we need to <span style="color: #1a5a8a; font-weight: bold;"><strong>learn a state</strong></span>…</li>
+<li>while we <span style="color: #1a5a8a; font-weight: bold;"><strong>evaluate the predictive performance</strong></span>…</li>
+<li>as we avoid <span style="color: #1a5a8a; font-weight: bold;"><strong>data leakage</strong></span>…</li>
+<li>with multi-source input …</li>
+</ul>
+<p>How do we deal with that?</p>
+</section>
+<section id="with-data-ops" class="slide level2 smaller">
+<h2>With Data Ops…</h2>
 <p><strong>Data wrangling:</strong> filtering, resampling, aggregations, joins, …</p>
 <ul>
 <li>Cross-validate without <span style="color: #1a5a8a; font-weight: bold;"><strong>data leaks</strong></span>.</li>
@@ -304,36 +321,173 @@ estimator.predict(X_new)</code></pre>
 <h2 data-id="quarto-animate-title">Basic example</h2>
 <div class="columns">
 <div class="column" style="width:60%;">
+<div class="fragment" data-fragment-index="1">
 <p>Declare the pipeline</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a aria-hidden="true" tabindex="-1"></a>data_path <span class="op">=</span> skrub.var(<span class="st">"data_path"</span>)</span>
-<span id="cb1-2"><a aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> data_path.skb.apply_func(pd.read_csv)</span>
-<span id="cb1-3"><a aria-hidden="true" tabindex="-1"></a>X <span class="op">=</span> data.drop(columns<span class="op">=</span><span class="st">"target"</span>, errors<span class="op">=</span><span class="st">"ignore"</span>).skb.mark_as_X()</span>
-<span id="cb1-4"><a aria-hidden="true" tabindex="-1"></a>y <span class="op">=</span> data[<span class="st">"target"</span>].skb.mark_as_y()</span>
-<span id="cb1-5"><a aria-hidden="true" tabindex="-1"></a>pred <span class="op">=</span> X.skb.<span class="bu">apply</span>(StandardScaler()).skb.<span class="bu">apply</span>(LogisticRegression(), y<span class="op">=</span>y)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1" data-code-line-numbers="|1|2|3,4|5-7|"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a aria-label="1"></a>data_path <span class="op">=</span> skrub.var(<span class="st">"data_path"</span>)</span>
+<span id="cb1-2"><a aria-label="2"></a>data <span class="op">=</span> data_path.skb.apply_func(pd.read_csv)</span>
+<span id="cb1-3"><a aria-label="3"></a>X <span class="op">=</span> data.drop(columns<span class="op">=</span><span class="st">"target"</span>, errors<span class="op">=</span><span class="st">"ignore"</span>).skb.mark_as_X()</span>
+<span id="cb1-4"><a aria-label="4"></a>y <span class="op">=</span> data[<span class="st">"target"</span>].skb.mark_as_y()</span>
+<span id="cb1-5"><a aria-label="5"></a>pred <span class="op">=</span> X.skb.<span class="bu">apply</span>(</span>
+<span id="cb1-6"><a aria-label="6"></a>    StandardScaler()</span>
+<span id="cb1-7"><a aria-label="7"></a>).skb.<span class="bu">apply</span>(LogisticRegression(), y<span class="op">=</span>y)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div class="fragment">
 <p>Cross-validate</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a aria-hidden="true" tabindex="-1"></a>pred.skb.cross_validate({<span class="st">"data_path"</span>: <span class="st">"historical_data.csv"</span>})</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2" data-code-line-numbers="|2|"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a aria-label="1"></a>pred.skb.cross_validate(</span>
+<span id="cb2-2"><a aria-label="2"></a>    environment<span class="op">=</span>{<span class="st">"data_path"</span>: <span class="st">"historical_data.csv"</span>}</span>
+<span id="cb2-3"><a aria-label="3"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+<div class="fragment">
 <p>Make a “learner” (object with <code>fit()</code> &amp; <code>predict()</code>)</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a aria-hidden="true" tabindex="-1"></a>learner <span class="op">=</span> pred.skb.make_learner().fit({<span class="st">"data_path"</span>: <span class="st">"historical_data.csv"</span>})</span>
-<span id="cb3-2"><a aria-hidden="true" tabindex="-1"></a>learner.predict({<span class="st">"data_path"</span>: <span class="st">"new_data.csv"</span>})</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3" data-code-line-numbers="|2|3|5|6|"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a aria-label="1"></a>learner <span class="op">=</span> pred.skb.make_learner(</span>
+<span id="cb3-2"><a aria-label="2"></a>).fit(</span>
+<span id="cb3-3"><a aria-label="3"></a>    environment<span class="op">=</span>{<span class="st">"data_path"</span>: <span class="st">"historical_data.csv"</span>}</span>
+<span id="cb3-4"><a aria-label="4"></a>)</span>
+<span id="cb3-5"><a aria-label="5"></a>learner.predict(</span>
+<span id="cb3-6"><a aria-label="6"></a>    environment<span class="op">=</span>{<span class="st">"data_path"</span>: <span class="st">"new_data.csv"</span>}</span>
+<span id="cb3-7"><a aria-label="7"></a>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
 </div><div class="column" style="width:40%;">
+<div class="fragment" data-fragment-index="2">
 <p><img data-src="images/base_ex.svg"></p>
+</div>
+</div></div>
+</section></section>
+<section>
+<section id="act-2-dataset-and-problem" class="title-slide slide level1 center">
+<h1>Act 2: Dataset and problem</h1>
+
+</section>
+<section id="the-game" class="slide level2 smaller">
+<h2>The game</h2>
+<div class="columns">
+<div class="column">
+<ul>
+<li>World of Warcraft (WoW) is a <strong>subscription-based</strong> MMORPG released in 2004 by Blizzard Entertainment.</li>
+<li>In WoW, players chreate <strong>character avatars</strong> to navigate the open game world and perform various activities.</li>
+<li>Players level up their caracters to make them more powerful.</li>
+<li>Player characters belong to a <strong>faction</strong> (Alliance or Horde), have a <strong>race</strong> and a <strong>class</strong>.</li>
+</ul>
+</div><div class="column">
+<div class="quarto-figure quarto-figure-center">
+<figure>
+<p><img data-src="images/World_of_Warcraft.png"></p>
+<figcaption>World of Warcraft original cover</figcaption>
+</figure>
+</div>
 </div></div>
 </section>
-<section id="basic-example-1" class="slide level2" data-auto-animate="true">
-<h2 data-id="quarto-animate-title">Basic example</h2>
-
-<img data-src="images/learner-schema/make_learner.svg" class="r-stretch"></section>
-<section id="in-summary-why-data-ops" class="slide level2">
-<h2>In summary, why Data Ops?</h2>
-</section>
-<section id="the-example-world-of-warcraft-avatar-history" class="slide level2 smaller">
-<h2>The example: World of Warcraft Avatar History</h2>
+<section id="the-problem" class="slide level2 smaller">
+<h2>The problem</h2>
 <ul>
-<li><strong>Dataset</strong>: WoWAH — ~11M timestamped “heartbeats” (one snapshot every ~10 min, 2006–2009, 91k avatars)</li>
-<li><strong>Task</strong>: predict whether a player churns (no activity for two months) in month <em>M+1</em></li>
-<li><strong>Unit of analysis</strong>: the (character, month) pair, built as a cross-product grid</li>
-<li><strong>Features</strong>: sessionization (<code>SessionEncoder</code>), monthly aggregates, zone-rarity / Gini location features, lag &amp; diff features</li>
-<li><strong>Model</strong>: <code>HistGradientBoostingClassifier</code> + <code>TableVectorizer</code>, month-by-month temporal CV</li>
+<li>Since WoW is subscription-based, players pay a monthly fee to play the game.</li>
+<li>Some players eventually stop playing, and thus stop paying their subscription.</li>
+</ul>
+<div class="callout callout-none no-icon callout-style-simple">
+<div class="callout-body">
+<div class="callout-content">
+<p>We want to predict which players are likely to churn in the next month, in order to enact some measure to keep them from leaving.</p>
+<p>A player <strong>churns</strong> if they have <strong>no activity</strong> for two full months.</p>
+</div>
+</div>
+</div>
+<div class="fragment">
+<ul>
+<li>Our “unit of analysis” is a (player character, month) pair.</li>
+<li>Each pair tells us whether the given player character played on the given month.</li>
+</ul>
+</div>
+</section>
+<section id="the-dataset" class="slide level2 smaller">
+<h2>The dataset</h2>
+<div class="columns">
+<div class="column">
+<ul>
+<li><strong>Dataset</strong>: World of Warcraft Avatar history Dataset <sup>1</sup></li>
+<li>~35.6M timestamped “character is active” lines (<strong>heartbeats</strong>).</li>
+<li>Heartbeats are stored in txt files, grouped by day and quarter.</li>
+<li>Time range: 2005-12-31 / 2009-01-10 in the <strong>Taiwanese server</strong>.</li>
+<li>Two expansions are included in the range:
+<ul>
+<li>The Burning Crusade (April 3, 2007)</li>
+<li>Wrath of the Lich King (November 18, 2008).</li>
+</ul></li>
+</ul>
+</div><div class="column">
+<pre><code># cut output of tree WoWAH
+WoWAH
+├── 2006_01_03
+│&nbsp;&nbsp; ├── 2006-01-01
+│&nbsp;&nbsp; │&nbsp;&nbsp; ├── 00-03-56.txt
+│&nbsp;&nbsp; │&nbsp;&nbsp; ├── 00-13-43.txt
+│&nbsp;&nbsp; │&nbsp;&nbsp; ├── 00-23-48.txt
+│&nbsp;&nbsp; │&nbsp;&nbsp; ├── 00-33-48.txt
+│&nbsp;&nbsp; │&nbsp;&nbsp; ├── ...
+│&nbsp;&nbsp; ├── 2006-01-02
+│&nbsp;&nbsp; ├── ...
+├── 2006_04_06
+├── ...</code></pre>
+</div></div>
+<aside><ol class="aside-footnotes"><li id="fn1"><p><a href="https://web.cs.wpi.edu/~claypool/mmsys-dataset/2011/wow/">Source</a></p></li></ol></aside></section>
+<section id="the-dataset-1" class="slide level2 smaller">
+<h2>The dataset</h2>
+<div class="columns">
+<div class="column">
+<ul>
+<li>Training samples are plain text, with custom formatting.</li>
+<li>A custom parser must be used to convert the samples and extract the correct dtypes.</li>
+</ul>
+</div><div class="column">
+<pre><code># head WoWAH/2006_01_03/2006-01-01/00-03-56.txt 
+Persistent_Storage = {
+    [1] = "0, 12/31/05 23:59:46, 1,0, , 5, Orc, Warrior, Durotar, no, 0",
+    [2] = "0, 12/31/05 23:59:46, 1,1, , 9, Orc, Shaman, Durotar, yes, 0",
+    [3] = "0, 12/31/05 23:59:52, 2,2, , 13, Orc, Shaman, Durotar, no, 0",
+    [4] = "0, 12/31/05 23:59:52, 2,3,0, 14, Orc, Warrior, Durotar, no, 0",
+    [5] = "0, 12/31/05 23:59:52, 2,4, , 14, Orc, Shaman, Durotar, yes, 0",
+    [6] = "0, 12/31/05 23:59:52, 2,5, , 16, Orc, Hunter, The Barrens, yes, 0",
+    [7] = "0, 12/31/05 23:59:52, 2,6, , 18, Orc, Warlock, The Barrens, no, 0",
+    [8] = "0, 12/31/05 23:59:52, 2,7, , 17, Orc, Hunter, Silverpine Forest, yes, 0",
+</code></pre>
+</div></div>
+</section>
+<section id="the-datasets-some-statistics" class="slide level2 smaller">
+<h2>The datasets: some statistics</h2>
+
+<img data-src="reports/exploration/levels_over_time.png" class="r-stretch"></section>
+<section id="the-datasets-some-statistics-1" class="slide level2 smaller" data-auto-animate="true">
+<h2 data-id="quarto-animate-title">The datasets: some statistics</h2>
+
+<img data-src="reports/exploration/characters_by_month.png" class="r-stretch"></section>
+<section id="the-dataset-tablereport" class="slide level2">
+<h2>The dataset: <code>TableReport</code></h2>
+</section>
+<section id="feature-engineering" class="slide level2 smaller">
+<h2>Feature engineering</h2>
+<ul>
+<li>Session-based features (<code>skrub.SessionEncoder</code>)
+<ul>
+<li>Number of sessions, duration, distribution during the day…</li>
+</ul></li>
+<li>Monthly aggregates
+<ul>
+<li>Statistics by class, race, overall playerbase…</li>
+</ul></li>
+<li>Location-based features
+<ul>
+<li>Zone rarity, where players spend their time</li>
+</ul></li>
+<li>Lagged features</li>
+<li><code>skrub.TableVectorizer</code> to encode</li>
+</ul>
+<p>More detail about feature engineering and model selection is available in the full technical report.</p>
+</section>
+<section id="model-selection" class="slide level2">
+<h2>Model selection</h2>
+<ul>
+<li><code>HistGradientBoostingClassifier</code> as the evaluation model</li>
+<li>Month-by-month temporal CV</li>
+<li>Hyperparameter tuning with Data Ops and Optuna</li>
 </ul>
 <div class="callout callout-important callout-titled callout-style-default">
 <div class="callout-body">
@@ -344,17 +498,73 @@ estimator.predict(X_new)</code></pre>
 <p><strong>Important</strong></p>
 </div>
 <div class="callout-content">
-<p>Model optimization is <em>intentionally</em> not the focus of this talk.</p>
+<p>Model optimization is intentionally <strong>not the focus</strong> of this talk.</p>
 </div>
 </div>
 </div>
 </section>
-<section id="pain-point-1-leakage-in-temporal-feature-engineering" class="slide level2 smaller">
-<h2>Pain point 1 — Leakage in temporal feature engineering</h2>
+<section id="caveats" class="slide level2">
+<h2>Caveats</h2>
+<ul>
+<li>While we are interested in <strong>players</strong>, we have information only about their <strong>avatars</strong>. A player may stop playing with an avatar, but keep paying the subscription.</li>
+<li>As this is past data, we cannot actually evaluate the effectiveness of whatever measure we decide to implement, so we can only try to <strong>predict player behavior</strong>.</li>
+</ul>
+</section></section>
+<section>
+<section id="act-3-the-implementation" class="title-slide slide level1 center">
+<h1>Act 3: The implementation</h1>
+
+</section>
+<section id="pain-point-1---data-ingestion-is-part-of-the-pipeline" class="slide level2 smaller">
+<h2>Pain point 1 - Data ingestion is part of the pipeline</h2>
+<div class="columns">
+<div class="column">
+<ul>
+<li>Data is not in a clean format:
+<ul>
+<li>Heartbeats are in text files scattered over hundreds of folders</li>
+<li>Logs need to be resampled to have (character, month) granularity</li>
+</ul></li>
+<li>The same transformations (and all other <strong>learned states</strong>) need to be replayed on new data.</li>
+<li>Glue code and pre-processing scripts are brittle and prone to errors.</li>
+</ul>
+</div><div class="column">
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6" data-code-line-numbers="|3-4,9-11|6-7,13-14"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a aria-label="1"></a><span class="im">import</span> skrub</span>
+<span id="cb6-2"><a aria-label="2"></a></span>
+<span id="cb6-3"><a aria-label="3"></a><span class="kw">def</span> draft_loader():</span>
+<span id="cb6-4"><a aria-label="4"></a>  <span class="cf">return</span> pd.read_csv(<span class="st">"path/to/file.csv"</span>)</span>
+<span id="cb6-5"><a aria-label="5"></a></span>
+<span id="cb6-6"><a aria-label="6"></a><span class="kw">def</span> prod_loader():</span>
+<span id="cb6-7"><a aria-label="7"></a>  <span class="cf">return</span> api.fetch().to_pandas()</span>
+<span id="cb6-8"><a aria-label="8"></a></span>
+<span id="cb6-9"><a aria-label="9"></a>loader <span class="op">=</span> skrub.var(<span class="st">"loader"</span>, draft_loader, becomes_default<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb6-10"><a aria-label="10"></a><span class="co"># build the DAG  </span></span>
+<span id="cb6-11"><a aria-label="11"></a>learner <span class="op">=</span> data_op.skb.make_learner(fitted<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb6-12"><a aria-label="12"></a></span>
+<span id="cb6-13"><a aria-label="13"></a><span class="co"># Use a different loader to get production data</span></span>
+<span id="cb6-14"><a aria-label="14"></a>learner.predict({<span class="st">"loader"</span>: prod_loader})</span>
+<span id="cb6-15"><a aria-label="15"></a></span>
+<span id="cb6-16"><a aria-label="16"></a><span class="co"># No changes needed by the learner!</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div></div>
+</section>
+<section id="pain-point-1---data-preparation-is-part-of-the-pipeline" class="slide level2 smaller">
+<h2>Pain point 1 - Data preparation is part of the pipeline</h2>
+<p>In our Data Op plan:</p>
+<ol type="1">
+<li>The input dataset is a list of plaintext files</li>
+<li>The pipeline reads each file, removes bloat lines, parses each heartbeat</li>
+<li>Heartbeats are converted to a polars lazyframe to serve as <code>historical</code> for the rest of the pipeline</li>
+<li>Builds the churn dataset by aggregating the available data over player character and month</li>
+</ol>
+<p>The target is built <strong>inside</strong> of the pipeline.</p>
+</section>
+<section id="pain-point-2-leakage-in-temporal-feature-engineering" class="slide level2 smaller">
+<h2>Pain point 2 — Leakage in temporal feature engineering</h2>
 <ul>
 <li>Features must only use data available at scoring time</li>
 <li>Session detection and aggregations are <strong>stateful w.r.t. time</strong>: doing them once on the full table leaks the future</li>
-<li>sklearn <code>Pipeline</code> cannot do this: <code>X</code>/<code>y</code> must exist before the pipeline starts, and wrangling lives outside</li>
+<li>sklearn <code>Pipeline</code> cannot do this: <code>X</code>/<code>y</code> must exist <strong>before</strong> the pipeline starts, and wrangling lives outside</li>
+<li>we are performing aggregations Over</li>
 <li>skrub docs warn explicitly: <em>aggregation can introduce data leakage</em> → wrap it in the DataOps plan</li>
 <li>In the example: <code>X</code> and <code>y</code> are cut <strong>inside</strong> the plan (<code>mark_as_X</code> / <code>mark_as_y</code>), so each CV fold re-runs the feature code on training data only</li>
 </ul>
@@ -398,19 +608,19 @@ estimator.predict(X_new)</code></pre>
 <li>Now, the splitter is honored by <code>cross_validate</code>, <code>train_test_split</code>, randomized search, and scoring</li>
 </ul>
 </div><div class="column" style="width:60%;">
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode python code-with-copy" data-id="quarto-animate-code"><code class="sourceCode python hljs"><span id="cb4-1" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Splitter:</span>
-<span id="cb4-2" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> split(<span class="va">self</span>, X, y<span class="op">=</span><span class="va">None</span>):</span>
-<span id="cb4-3" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>        ...</span>
-<span id="cb4-4" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> split_point <span class="kw">in</span> ...:</span>
-<span id="cb4-5" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>            test_month <span class="op">=</span> pl.Series([split_point]).dt.offset_by(<span class="st">"1mo"</span>).first()</span>
-<span id="cb4-6" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>            train_idx <span class="op">=</span> (</span>
-<span id="cb4-7" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>                X.with_row_index(<span class="st">"idx"</span>)</span>
-<span id="cb4-8" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>                .<span class="bu">filter</span>(pl.col(<span class="st">"month"</span>) <span class="op">&lt;=</span> split_point)[<span class="st">"idx"</span>]</span>
-<span id="cb4-9" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>            )</span>
-<span id="cb4-10" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>            test_idx <span class="op">=</span> (</span>
-<span id="cb4-11" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>                X.with_row_index(<span class="st">"idx"</span>)</span>
-<span id="cb4-12" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>                .<span class="bu">filter</span>(pl.col(<span class="st">"month"</span>) <span class="op">==</span> test_month)[<span class="st">"idx"</span>]</span>
-<span id="cb4-13" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>            )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb7"><pre class="sourceCode python code-with-copy" data-id="quarto-animate-code"><code class="sourceCode python hljs"><span id="cb7-1" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> Splitter:</span>
+<span id="cb7-2" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>    <span class="kw">def</span> split(<span class="va">self</span>, X, y<span class="op">=</span><span class="va">None</span>):</span>
+<span id="cb7-3" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>        ...</span>
+<span id="cb7-4" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>        <span class="cf">for</span> split_point <span class="kw">in</span> ...:</span>
+<span id="cb7-5" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>            test_month <span class="op">=</span> pl.Series([split_point]).dt.offset_by(<span class="st">"1mo"</span>).first()</span>
+<span id="cb7-6" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>            train_idx <span class="op">=</span> (</span>
+<span id="cb7-7" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>                X.with_row_index(<span class="st">"idx"</span>)</span>
+<span id="cb7-8" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>                .<span class="bu">filter</span>(pl.col(<span class="st">"month"</span>) <span class="op">&lt;=</span> split_point)[<span class="st">"idx"</span>]</span>
+<span id="cb7-9" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>            )</span>
+<span id="cb7-10" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>            test_idx <span class="op">=</span> (</span>
+<span id="cb7-11" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>                X.with_row_index(<span class="st">"idx"</span>)</span>
+<span id="cb7-12" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>                .<span class="bu">filter</span>(pl.col(<span class="st">"month"</span>) <span class="op">==</span> test_month)[<span class="st">"idx"</span>]</span>
+<span id="cb7-13" class="hljs-ln-code"><a aria-hidden="true" tabindex="-1"></a>            )</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </div></div>
 </section>
 <section id="pain-point-3-tuning-wrangling-choices-not-just-model-knobs" class="slide level2 smaller">
@@ -446,35 +656,6 @@ estimator.predict(X_new)</code></pre>
  )
  pred = X.skb.apply(LogisticRegression())</code></pre>
 </section>
-<section id="pain-point-4-one-pipeline-object-many-inputs" class="slide level2 smaller">
-<h2>Pain point 4 — One pipeline object, many inputs</h2>
-<div class="columns">
-<div class="column">
-<ul>
-<li>Multi-input pipelines are usually scattered across scripts</li>
-<li>Input methods can differ between model setup and production (read from file, fetch an API…)</li>
-<li>The final DataOp behaves like one sklearn estimator: <code>.fit()</code>, save, load, <code>skb.eval(env)</code>, <code>skb.cross_validate(env)</code></li>
-<li>Production: replay the <em>exact</em> trained DAG on new data, no need for glue code</li>
-</ul>
-</div><div class="column">
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb5" data-code-line-numbers="|3-4,9-11|6-7,13-14"><pre class="sourceCode numberSource python number-lines code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a aria-label="1"></a><span class="im">import</span> skrub</span>
-<span id="cb5-2"><a aria-label="2"></a></span>
-<span id="cb5-3"><a aria-label="3"></a><span class="kw">def</span> draft_loader():</span>
-<span id="cb5-4"><a aria-label="4"></a>  <span class="cf">return</span> pd.read_csv(<span class="st">"path/to/file.csv"</span>)</span>
-<span id="cb5-5"><a aria-label="5"></a></span>
-<span id="cb5-6"><a aria-label="6"></a><span class="kw">def</span> prod_loader():</span>
-<span id="cb5-7"><a aria-label="7"></a>  <span class="cf">return</span> api.fetch().to_pandas()</span>
-<span id="cb5-8"><a aria-label="8"></a></span>
-<span id="cb5-9"><a aria-label="9"></a>loader <span class="op">=</span> skrub.var(<span class="st">"loader"</span>, draft_loader, becomes_default<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb5-10"><a aria-label="10"></a><span class="co"># build the DAG  </span></span>
-<span id="cb5-11"><a aria-label="11"></a>learner <span class="op">=</span> data_op.skb.make_learner(fitted<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb5-12"><a aria-label="12"></a></span>
-<span id="cb5-13"><a aria-label="13"></a><span class="co"># Use a different loader to get production data</span></span>
-<span id="cb5-14"><a aria-label="14"></a>learner.predict({<span class="st">"loader"</span>: prod_loader})</span>
-<span id="cb5-15"><a aria-label="15"></a></span>
-<span id="cb5-16"><a aria-label="16"></a><span class="co"># No changes needed by the learner!</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</div></div>
-</section>
 <section id="pain-point-5-debugging-a-complex-dag" class="slide level2">
 <h2>Pain point 5 — Debugging a complex DAG</h2>
 <ul>
@@ -483,6 +664,11 @@ estimator.predict(X_new)</code></pre>
 <li><code>skb.report()</code> emits an HTML report: every node’s name, description, predecessors, fitted estimator, and <strong>data preview</strong></li>
 <li>On failure, the report shows the offending node and the traceback</li>
 </ul>
+</section>
+<section id="pain-point-5---debugging-a-complex-dag" class="slide level2">
+<h2>Pain point 5 - Debugging a complex DAG</h2>
+<iframe src="reports/execution_report/index.html" width="100%" height="480px" style="border: 1px solid #ccc; border-radius: 4px;">
+</iframe>
 </section>
 <section id="pain-point-7-stay-in-your-dataframe-api-inside-the-plan" class="slide level2 smaller">
 <h2>Pain point 7 — Stay in your dataframe API inside the plan</h2>
@@ -494,7 +680,8 @@ estimator.predict(X_new)</code></pre>
 </ul>
 
 
-</section>
+</section></section>
+
     </div>
   <div class="quarto-auto-generated-content" style="display: none;">
 <div class="footer footer-default">
