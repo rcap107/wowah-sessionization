@@ -45,10 +45,15 @@ anonymised to integers.
 | `wowah_user_month_with_churn.parquet` | 14 MB | Legacy `(char, month, churned)` table |
 | `no_matches_files.log`, `index.html`, `img/` | | Parser log and the original dataset page |
 
-No script in the repository creates the `2008` and `all` parquet files from the
-parsed files (the renaming of `avatar_id` to `char` and the selection of 2008
-happened elsewhere). The churn table is no longer saved to disk: the pipeline builds
-it in memory, so `main.py` does not need either legacy table. `lagged_features.py`,
+The parquet files above predate the current pipeline and are kept only for the
+other, still-parquet-based scripts listed below (`main.py` no longer reads
+them). `main.py` instead parses `data/raw/WoWAH/` directly as part of the
+plan: `src/parse_to_single_table.list_raw_files` and `parse_files` turn a
+list of raw `.txt` paths into the typed table (renaming `avatar_id` to
+`char`), as a `skb.apply_func` node of the DataOp graph (see "Problem
+definition" below and `pain_points.qmd`'s Pain point 4). The churn table is
+no longer saved to disk: the pipeline builds it in memory, so `main.py` does
+not need either legacy table. `lagged_features.py`,
 `main-unpacked.py`, `adding_features.py` (its `__main__` block) and two plotting
 scripts still read `wowah_churn_data.parquet`.
 
@@ -102,9 +107,29 @@ grows over time, which breaks `TimeSeriesSplit`'s assumption of equal-size folds
 
 ### `main.py`: pipeline
 
-- `DATASETS` maps `"2008"` and `"all"` to the parquet files. The command line is
-  `python main.py [--dataset {2008,all}] [--fraction F]` and the same arguments exist on
-  `evaluate()`, `cross_validate()` and `random_search()`.
+- `RAW_DATA_ROOT`, `HISTORICAL_END`, `UNSEEN_START`, `UNSEEN_END` carve
+  `data/raw/WoWAH/` into two non-overlapping-in-purpose file selections:
+  **"train"** (every raw file through October 2008, matching `MIN_DATE`/
+  `MAX_DATE`) and **"unseen"** (October 2008 through January 10th, 2009 — the
+  last day in the dataset). October is in both: it only seeds November's
+  features in the "unseen" environment and is never itself a scored month.
+  `get_env(env_kind)` returns `{"raw_files": [...]}` for either selection. The
+  command line is `python main.py [--env {train,unseen,predict-unseen}]
+  [--fraction F]`, and `env_kind` is the same argument on `evaluate()` and
+  `cross_validate()`.
+- `load(file_paths, fraction)` now **parses** the raw `.txt` files
+  (`src/parse_to_single_table.parse_files`) and then samples characters
+  (`sample_by_user`), instead of reading an already-parsed parquet. Parsing
+  is thus a node of the plan (`raw_files.skb.apply_func(load, ...)`), so the
+  exact same graph parses whichever file list an environment points to.
+- `predict_unseen(load_fraction)` fits the plan on the **"train"**
+  environment, then calls the fitted learner's `.predict()` on the
+  **"unseen"** environment: the raw logs for November/December 2008 (and
+  January 2009, for computing December's target) are parsed for the first
+  time only at prediction time. It returns a `(char, month,
+  churn_next_pred)` table for November and December, since both have a real
+  (non-null) target once January's data is available — this is the "show a
+  real prediction on genuinely unseen raw logs" demo for Pain point 4.
 - `build_feature_table(historical_data, session_gap, use_location, add_gini, interval, lags)`
   builds a feature table for **every** `(char, month)` pair, independently of the CV
   fold. This is needed because lag features need each character's full monthly
@@ -125,9 +150,6 @@ grows over time, which breaks `TimeSeriesSplit`'s assumption of equal-size folds
   Searched choices: `session_gap` ∈ {15, 30, 60}, `location_features` (bool),
   `lags` ∈ {none, (1), (1, 2), (1, 2, 3)}, learning rate ∈ [0.1, 0.5] (log scale).
   `add_gini` is fixed to `True`.
-- `get_env(dataset)` only passes the parquet path. The characters are sampled inside the plan
-  (`load` with `sample_by_user`), so the target rows and the features always cover the same
-  characters.
 - `random_search()` uses the Optuna backend and stores results in `wowah_churn_study.db`.
 
 ### `add_churn.py`: target table

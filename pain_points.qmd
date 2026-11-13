@@ -64,14 +64,14 @@ In `make_data_op()` (`main.py:222-228`), `session_gap`, `use_location`, `add_gin
 
 ## Pain point 4 — One pipeline object, many inputs, deployable
 
-- Multi-input pipelines (raw log file **path**, churn table, config) are usually scattered across scripts with brittle glue
-- The example treats even the file path as an input: `skrub.var("historical_data_file")`
-- `apply_func` inserts arbitrary Python (loading, sampling, churn-label construction) as graph nodes
+- Multi-input pipelines (raw log file **paths**, churn table, config) are usually scattered across scripts with brittle glue
+- The example treats even the *raw-log parsing* as a pipeline step, not a one-off script: `skrub.var("raw_files")` → `apply_func(load)`, where `load` regex-parses the `.txt` files itself
+- `apply_func` inserts arbitrary Python (parsing, sampling, churn-label construction) as graph nodes
 - The final DataOp behaves like one sklearn estimator: `.fit()`, save, load, `skb.eval(env)`, `skb.cross_validate(env)`
-- Production: replay the *exact* trained DAG on a new month — no re-implementation drift
+- Production: fit on a **historical** set of raw files, `.predict()` on a **held-out** set of raw files the plan has never parsed before — no re-implementation drift, not even in the parsing code
 
 ::: {.notes}
-`make_data_op()` (`main.py:206`) starts from a *path* variable, applies `load` (which subsamples by user), fixes the `guild == -1` sentinel, builds churn labels, marks X/y, adds features, vectorizes, and fits HGB — one object. `cross_validate()` and `evaluate()` just pass different environments (`{"historical_data_file": ...}`) to the same plan (`main.py:259-287`). The docs' `what_are_data_ops.rst` frames this as: a DataOp is a complete pipeline from data loading to prediction that can be fitted, tuned, cross-validated and saved like a scikit-learn estimator; `data_ops_vs_alternatives.rst` contrasts this with `Pipeline`, which is a linear sequence on a single table with a fixed row count.
+`make_data_op()` (`main.py:249`) starts from a *list of raw file paths* variable, applies `load` (which now parses the raw `.txt` logs via `src/parse_to_single_table.parse_files`, then subsamples by user), fixes the `guild == -1` sentinel, builds churn labels, marks X/y, adds features, vectorizes, and fits HGB — one object. `cross_validate()` and `evaluate()` pass the `"train"` environment (`get_env("train")`, raw files through October 2008); `predict_unseen()` fits on `"train"` and calls `learner.predict(get_env("unseen"))` on raw files from October 2008 through January 10th 2009 that were never touched during fitting, producing real (non-null) predictions for November and December 2008. The docs' `what_are_data_ops.rst` frames this as: a DataOp is a complete pipeline from data loading to prediction that can be fitted, tuned, cross-validated and saved like a scikit-learn estimator; `data_ops_vs_alternatives.rst` contrasts this with `Pipeline`, which is a linear sequence on a single table with a fixed row count.
 :::
 
 ## Pain point 5 — Debugging a complex DAG

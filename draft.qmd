@@ -388,11 +388,13 @@ show(filter_df_by_month, build_feature_table, add_features)
 
 ::: {.callout-tip collapse="true"}
 #### Loading and downsampling the file (click to expand)
-The dataset is very large, so we downsample it to reduce the execution time. 
-Note that we need to be deliberate with how we sample the data: rather than choosing
-a random subset of the values in the dataset, we need to be careful to select a
-subset of characters and keep all the rows for those characters. This ensures that 
-we have reliable information about all the characters. 
+`load` parses the raw `.txt` heartbeat logs itself -- parsing is a node of the
+plan, not a separate pre-processing script -- then downsamples the result to
+reduce execution time. We need to be deliberate with how we sample the data:
+rather than choosing a random subset of the values in the dataset, we need to
+be careful to select a subset of characters and keep all the rows for those
+characters. This ensures that we have reliable information about all the
+characters. 
 
 ```{python}
 #| echo: false
@@ -418,15 +420,15 @@ show(make_data_op)
 :::
 
 ### Running it
-The data op is evaluated by passing the path of the parquet file as input. Here we 
-cross-validate it on 10% of the characters of the 2008 data:
+The data op is evaluated by passing a list of raw log file paths as input --
+parsing them is itself one of the plan's nodes (see "Loading and
+downsampling the file" above). Here we cross-validate it on 10% of the
+characters of the historical (through October 2008) files:
 
 ```{python}
 #| eval: false
 data_op = make_data_op(load_fraction=0.1)
-results = data_op.skb.cross_validate(
-    environment={"historical_data_file": "data/wowah_data_2008.parquet"}
-)
+results = data_op.skb.cross_validate(environment=main.get_env("train"))
 ```
 
 The ROC AUC of each test month (March to November 2008, with default hyperparameters; values change by a few hundredths between runs) is:

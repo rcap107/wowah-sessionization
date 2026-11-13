@@ -24,6 +24,7 @@ from skrub import ApplyToCols, DatetimeEncoder, SessionEncoder, TableVectorizer
 from sklearn.impute import SimpleImputer
 
 from add_churn import build_churn_dataset
+from src.parse_to_single_table import list_raw_files, parse_files
 from src.utils import sample_by_user
 
 from adding_features import (
@@ -42,13 +43,36 @@ MIN_DATE = datetime.strptime("2006-02-01", "%Y-%m-%d")
 # incomplete (it stops on January 10th).
 MAX_DATE = datetime.strptime("2008-10-01", "%Y-%m-%d")
 
-# Input files that main.py can run on: the year 2008 only (fast, good for
-# development) or the full 2006-2009 dataset.
-DATASETS = {
-    "2008": "data/wowah_data_2008.parquet",
-    "all": "data/wowah_data_all.parquet",
-}
-DEFAULT_DATASET = "2008"
+# Raw WoWAH logs: one ".txt" heartbeat file every ~10 minutes, under
+# "YYYY-MM-DD" day folders.
+# Parsing the files is part of the pipeline itself (see `make_data_op`). This
+# allows the same graph to be fitted on one set of raw files, and later run
+# on another set of raw files.
+RAW_DATA_ROOT = "data/raw/WoWAH"
+
+# "historical" is used to fit the pipeline: every raw file up to and
+# including October 2008, matching the MIN_DATE/MAX_DATE window the
+# `Splitter` already validates against.
+# October 2008 is chosen as the last month of the historical data because we need
+# two months to measure churn_next: in order to use December 2008's
+# churn_next target, we would need January 2009's data, which is incomplete
+# (it stops on January 10th).
+HISTORICAL_END = datetime.strptime("2008-10-31", "%Y-%m-%d")
+
+# "unseen" is never used while fitting: it is a hard cutoff on the parsing of 
+# the raw files, so that the pipeline only evaluates on files it has never seen
+# before.
+# It starts in October too (so that
+# November's features, which are built from October's logs, are not
+# degenerate) and runs through January 10th, 2009 -- the last day in the
+# dataset -- so that December's `churn_next` target (which needs January's
+# data to know whether a character is also absent that month) can be
+# computed, and a real prediction can be shown for December.
+UNSEEN_START = datetime.strptime("2008-10-01", "%Y-%m-%d")
+UNSEEN_END = datetime.strptime("2009-01-10", "%Y-%m-%d")
+
+ENV_KINDS = ("train", "unseen")
+DEFAULT_ENV_KIND = "train"
 
 
 class Splitter:
@@ -73,7 +97,9 @@ class Splitter:
             # test_month = split_point + relativedelta(months=1)
             # Or do this with polars which is more consistent with the rest of the code
             test_month = pl.Series([split_point]).dt.offset_by(interval).first()
-            last_train_month = pl.Series([split_point]).dt.offset_by("-" + interval).first()
+            last_train_month = (
+                pl.Series([split_point]).dt.offset_by("-" + interval).first()
+            )
             # Train indices are up to last_train_month, included
             train_idx = (
                 user_month.with_row_index("idx")
@@ -219,19 +245,24 @@ def add_features(X, feature_table):
     )
 
 
-def load(file, fraction=0.1):
+def load(file_paths, fraction=0.1):
+    """Parse the given raw ".txt" log files, then subsample by character."""
+    df = parse_files(file_paths)
     if fraction == 1:
-        return pl.scan_parquet(file)
+        return df.lazy()
 
-    df = pl.scan_parquet(file)
-    df = sample_by_user(df.collect(), fraction=fraction)
+    df = sample_by_user(df, fraction=fraction)
     return df.lazy()
 
 
 # %%
-def make_data_op(load_fraction=0.1):
-    historical = skrub.var("historical_data_file")
-    historical_data = historical.skb.apply_func(load, fraction=load_fraction)
+def make_data_op(load_fraction=0.1, return_x=False):
+    raw_files = skrub.var("raw_files")
+    # Parsing the raw logs is a node of the plan like any other: the exact
+    # same code path parses whichever files the "raw_files" environment
+    # variable points to, whether that's the historical training set or a
+    # held-out, never-before-seen set of files.
+    historical_data = raw_files.skb.apply_func(load, fraction=load_fraction)
     # In the original data, "guild == -1" means "no guild", so I'm replacing -1
     # with nulls.
     historical_data = historical_data.with_columns(
@@ -270,26 +301,45 @@ def make_data_op(load_fraction=0.1):
         HGB(learning_rate=skrub.choose_float(0.1, 0.5, log=True)), y=y
     ).skb.with_scoring("roc_auc")
     # data_op = encoded.skb.apply(DummyClassifier(), y=y) #.skb.with_scoring("roc_auc")
+    if return_x:
+        return data_op, X
     return data_op
 
 
 # %%
 
 
-def get_env(dataset=DEFAULT_DATASET):
-    # The characters to use are sampled inside the plan (see `load`), so the
-    # features and the (char, month) rows always cover the same characters.
-    return {"historical_data_file": DATASETS[dataset]}
+def get_env(env_kind=DEFAULT_ENV_KIND):
+    """
+    Build the environment for one of the two raw-file selections:
+
+    - "train": every raw file up to and including October 2008, used to fit
+      the pipeline (parsing included).
+    - "unseen": raw files from October 2008 through January 10th 2009, never
+      used while fitting. Passing this environment to a *fitted* learner's
+      `.predict()` re-runs the exact same graph -- including the parsing
+      step -- on logs it has never seen.
+
+    The characters to use are sampled inside the plan (see `load`), so the
+    features and the (char, month) rows always cover the same characters.
+    """
+    if env_kind == "train":
+        raw_files = list_raw_files(RAW_DATA_ROOT, end_date=HISTORICAL_END)
+    elif env_kind == "unseen":
+        raw_files = list_raw_files(
+            RAW_DATA_ROOT, start_date=UNSEEN_START, end_date=UNSEEN_END
+        )
+    else:
+        raise ValueError(f"env_kind must be one of {ENV_KINDS}, got {env_kind!r}")
+    return {"raw_files": raw_files}
 
 
-def cross_validate(dataset=DEFAULT_DATASET, load_fraction=0.1):
+def cross_validate(env_kind=DEFAULT_ENV_KIND, load_fraction=0.1):
     data_op = make_data_op(load_fraction=load_fraction)
-    return data_op.skb.cross_validate(environment=get_env(dataset))
+    return data_op.skb.cross_validate(environment=get_env(env_kind))
 
 
-def random_search(dataset=DEFAULT_DATASET, load_fraction=0.1):
-    # df = pl.read_parquet("data/wowah_churn_data.parquet")
-    # df = sample_by_user(df, fraction=0.15)
+def random_search(env_kind=DEFAULT_ENV_KIND, load_fraction=0.1):
     search = make_data_op(load_fraction=load_fraction).skb.make_randomized_search(
         backend="optuna",
         n_jobs=-1,
@@ -297,24 +347,57 @@ def random_search(dataset=DEFAULT_DATASET, load_fraction=0.1):
         # study_name="wowah_churn_study",
         storage="sqlite:///wowah_churn_study.db",
     )
-    return search, get_env(dataset)
+    return search, get_env(env_kind)
 
 
-def evaluate(dataset=DEFAULT_DATASET, load_fraction=0.1):
+def evaluate(env_kind=DEFAULT_ENV_KIND, load_fraction=0.1):
     data_op = make_data_op(load_fraction=load_fraction)
-    results = data_op.skb.eval(get_env(dataset))
+    results = data_op.skb.eval(get_env(env_kind))
     return results, data_op
+
+
+def predict_unseen(load_fraction=0.1):
+    """
+    Fit the pipeline -- raw-log parsing included -- on the historical files
+    only (through October 2008), then reuse the exact same, already-fitted
+    graph to score November and December 2008: two months it has never seen,
+    parsed on the fly from their own raw ".txt" files.
+
+    Returns a small (char, month, churn_next_pred) table for November and
+    December so the predictions can be inspected/displayed directly.
+    """
+    data_op, X = make_data_op(load_fraction=load_fraction, return_x=True)
+    learner = data_op.skb.make_learner()
+    learner.fit(get_env("train"))
+
+    unseen_env = get_env("unseen")
+    predictions = learner.predict(unseen_env)
+    # Re-run (just) the X-building part of the same plan on the unseen
+    # environment to recover which (char, month) row each prediction belongs
+    # to: both calls are deterministic, so the row order matches.
+    x_unseen = X.skb.eval(unseen_env)
+    result = x_unseen.with_columns(pl.Series("churn_next_pred", predictions)).filter(
+        pl.col("month").is_in([datetime(2008, 11, 1), datetime(2008, 12, 1)])
+    )
+    return result.sort(["month", "char"])
 
 
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Evaluate the churn prediction DataOps plan.")
+    parser = argparse.ArgumentParser(
+        description="Evaluate the churn prediction DataOps plan."
+    )
     parser.add_argument(
-        "--dataset",
-        choices=list(DATASETS),
-        default=DEFAULT_DATASET,
-        help="'2008' for the year 2008 only, 'all' for the full dataset",
+        "--env",
+        choices=[*ENV_KINDS, "predict-unseen"],
+        default=DEFAULT_ENV_KIND,
+        help=(
+            "'train' evaluates the plan on the historical files (through "
+            "October 2008), 'unseen' evaluates it on the held-out files "
+            "(October 2008 - January 2009), 'predict-unseen' fits on 'train' "
+            "and predicts November/December 2008 from the held-out files"
+        ),
     )
     parser.add_argument(
         "--fraction",
@@ -324,10 +407,14 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    results, data_op = evaluate(args.dataset, load_fraction=args.fraction)
-    report = data_op.skb.report(environment=get_env(args.dataset))
-    # results = cross_validate(args.dataset, load_fraction=args.fraction)
+    if args.env == "predict-unseen":
+        predictions = predict_unseen(load_fraction=args.fraction)
+        print(predictions)
+    else:
+        results, data_op = evaluate(args.env, load_fraction=args.fraction)
+        report = data_op.skb.report(environment=get_env(args.env))
+    # results = cross_validate(args.env, load_fraction=args.fraction)
     # print(results)
 
-    # search, env = random_search(args.dataset, load_fraction=args.fraction)
+    # search, env = random_search(args.env, load_fraction=args.fraction)
     # search.fit(env)
